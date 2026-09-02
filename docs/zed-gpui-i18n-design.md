@@ -252,7 +252,7 @@ Tree-sitter 和规则系统无法可靠解决以下问题时，可以增加一�
 - 跨函数调用关系；
 - 宏展开后的调用结构。
 
-该 sidecar 可以基于 rust-analyzer/HIR，但不应在没有证据时成为 MVP 的硬依赖。阶段 1C 的 r2 独立审计已经给出触发证据：CST 无法安全区分协议字段、用户路径、错误 display 与产品自有动态字段，并形成 `7/47` exclusion leakage。阶段 1C-B 因而只提前实现类型/字段来源、跨 helper/callback 返回来源以及 sink/origin 分离所需的最小 HIR 能力；大型 workspace 分析的其余范围仍按证据增量引入。
+该 sidecar 可以基于 rust-analyzer/HIR，但不应在没有证据时成为 MVP 的硬依赖。阶段 1C 的独立审计已经给出触发证据：CST 无法安全区分协议字段、用户路径、错误 display 与产品自有动态字段，并形成 `7/47` exclusion leakage。阶段 1C-B 因而只提前实现类型/字段来源、跨 helper/callback 返回来源以及 sink/origin 分离所需的最小 HIR 能力；大型 workspace 分析的其余范围仍按证据增量引入。
 
 ### 4.5 版本快照与能力探测
 
@@ -703,7 +703,7 @@ Tree-sitter 后端及已知 grammar 限制记录在 [ADR 0006](decisions/0006-tr
 
 阶段 1C-A 的审核基础设施已落地：corpus blind bundle 与 workspace holdout audit bundle 都不暴露扫描预测，外部结果使用严格版本化 schema 并绑定 commit/corpus/config/tool/rule，`zed-builtin-v1` policy 固定 15 条 typed sink rules、2 条结构化 origin rules、capability probes 和 audit set。冻结报告重新验证完整 scan snapshot，先核验 audit bundle/result 身份，再按 occurrence ID 对账实际 scanner disposition，并同时检查 corpus review 与 holdout audit 的最小样本、分母、关键 strata、precision/coverage/recall 和安全错误类别。当前没有可用于最终冻结的独立审核结果；没有双证据或证据失败时必须输出 `reviewing`。
 
-r2 全量 corpus review 和 100 条 holdout audit 均已真实执行但未通过：corpus 有 20 条分歧，holdout 有 10 条 candidate/excluded mismatch。受控 CST 修复已消除 element-producing `match` 误报，并把纯格式控制字面量降为 excluded；corpus 裁决后仍有 7 条外部 ownership fixture 泄漏为 `review_required`。该结果使阶段 1C-B 保持 blocked，并按 ADR 0007 将最小 rust-analyzer/HIR 来源解析提前到本阶段；r2 结果不得复用为最终证据，r3 全量 review 与新 holdout 只能在 leakage 归零后生成。
+阶段 1C-B 当前因 7 条 external ownership exclusion fixture 仍为 `review_required` 而 blocked。ADR 0007 因此把最小 rust-analyzer/HIR 来源解析提前到本阶段，用于区分外部来源与产品动态字段，并分离 sink slot 和 expression origin；在 exclusion leakage 归零前，不得生成最终 review/audit evidence set。具体审核结果和恢复条件由[阶段 1C-B 工作项](work/active/2026-09-02-phase-1c-b-evidence-calibration.md)记录。
 
 ### 阶段 2：持久 inventory 与版本对账
 
@@ -845,4 +845,4 @@ r2 全量 corpus review 和 100 条 holdout audit 均已真实执行但未通过
 
 在上述闭环建立前，不应批量替换整个 Zed workspace，不应维护长期修改分支，不应把旧 patch 当作新版输入，不应把 runtime 字符串拦截当作生产翻译方案，也不应把完整 rust-analyzer/HIR 集成作为第一阶段前置条件。
 
-当前主攻方向是阶段 1C-B 的最小 HIR 来源解析，目标是解决独立审计确认的 external ownership 与 sink/origin 分离缺口；不是阶段 2 inventory，也不是 Overlay、runtime 或完整通用 HIR 后端。只有 exclusion leakage 归零并重新完成 r3 全量 review 与新 holdout audit 后，才能冻结自动确认规则并把主攻方向转向阶段 2。
+当前主攻方向是阶段 1C-B 的最小 HIR 来源解析，目标是解决独立审计确认的 external ownership 与 sink/origin 分离缺口；不是阶段 2 inventory，也不是 Overlay、runtime 或完整通用 HIR 后端。只有 exclusion leakage 归零并重新完成与冻结 policy 身份一致的全量 review 和新 holdout audit 后，才能冻结自动确认规则并把主攻方向转向阶段 2。

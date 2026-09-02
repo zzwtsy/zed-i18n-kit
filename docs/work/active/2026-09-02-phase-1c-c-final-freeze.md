@@ -41,10 +41,9 @@ Blocked by: [阶段 1C-B 真实审核与 scanner/corpus 调整](2026-09-02-phase
 | 命令或操作 | 状态 | 证明内容 | 限制 |
 | --- | --- | --- | --- |
 | 1C-B 完成记录 | blocked | 本工作项启动条件 | 当前不能进行最终冻结 |
-| `freeze-check` 使用 r2 scan、但未提供 review/audit result | expected failed；exit 1，`freeze_status=reviewing`，`reviewed=0`、`audited=0`、47 failures；报告身份绑定当前 Zed commit、corpus SHA=`b0ec8dad5dacc601fcd1e38d959b557248d13bacedac1b204690549d26f2ac41` 和 config hash=`5afb6728f7e5496f2b7f87da3601d5ca2cc6db94f34a0f307b8900d340018c92` | 证明无独立证据时门禁 fail-closed，不能把 reviewing 改写为 frozen | 不是最终冻结；仍缺失真实独立 review/audit |
-| r2 独立 review/audit | failed and superseded；corpus 分歧和 holdout mismatch 已回流 1C-B | 证明独立审核门禁确实阻止错误冻结 | r2 身份和样本不得作为最终 r3 证据复用 |
-| workspace scan/evaluate、wheel smoke、`scripts/check.py` | passed；workspace scan 2698 occurrences / SHA=`1d81f60b75763a42dea76b390f3ad090ed3708b1dcf7c864b43ed5fadfa072f`，evaluate 0 unmatched/ambiguous、precision 1.0、recall 1.0、unsafe 0、leakage 0；wheel 与源码 policy 字节一致；`scripts/check.py` 149 tests | 记录最终身份下的交付回归 | evaluate 仍是 observational；未提供独立 review/audit result，不能通过 freeze |
-| `git -C local/zed status --short` | passed；无输出 | 外部 checkout 无修改 | 不替代功能证据 |
+| 最终 review/audit 与 `freeze-check` | not run | 1C-B 完成后验证双证据身份、分类、指标和冻结状态 | 当前缺少满足门禁的独立证据 |
+| workspace scan/evaluate、wheel smoke、`scripts/check.py` | not run | 最终 evidence set 身份锁定后执行交付回归 | 较早的 observational 结果不能证明最终冻结 |
+| `git -C local/zed status --short` | not run | 最终验收时确认外部 checkout 无修改 | 当前工作项尚未启动 |
 
 ## 风险与恢复
 

@@ -10,7 +10,7 @@
 
 默认 `scan` 已按 `crates/*/src/**/*.rs` 发现生产 Rust 文件，并排除测试、examples、benches、fixtures、component preview 和生成路径；固定 10 文件 profile 仅保留为阶段 1A 协议回归。当前 15 条 typed builtin rules 覆盖 GPUI component、Prompt、Notification、ARIA、Tooltip（含 `simple`、`for_action_in` 和 `with_meta`）以及受 receiver 约束的 `.child()`，另有 2 条结构化 origin rules；显式 import/alias 可以精确解析，通配符和父模块重导出保守进入 `review_required`。
 
-阶段 1C-A 已提供不含旧标签或扫描预测的 blind review bundle、严格 review result、分层 workspace holdout audit 和 fail-closed `freeze-check` 基础设施。r2 的真实全量 review 与 100 条 holdout audit 未通过；受控 CST 修复后，外部协议、用户与错误来源仍暴露需要最小 HIR 解析的 exclusion leakage。当前 266 条 corpus 样本仍全部是 `single_review`，规则状态保持 `reviewing`，r2 证据不得作为最终冻结输入。工具仍不生成翻译目录，也不修改源码。
+阶段 1C-A 已提供不含旧标签或扫描预测的 blind review bundle、严格 review result、分层 workspace holdout audit 和 fail-closed `freeze-check` 基础设施。当前 CST scanner 仍无法安全区分部分外部协议、用户与错误来源，7 条 exclusion fixture 因此保持 `review_required`；阶段 1C-B 在最小 HIR 来源解析完成前保持 blocked。266 条 corpus 样本仍全部是 `single_review`，规则状态保持 `reviewing`。审核证据和恢复条件见[阶段 1C-B 工作项](docs/work/active/2026-09-02-phase-1c-b-evidence-calibration.md)。工具仍不生成翻译目录，也不修改源码。
 
 ## 核心边界
 

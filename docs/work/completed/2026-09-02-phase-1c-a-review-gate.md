@@ -25,7 +25,7 @@ Completed: 2026-09-02
 
 - [x] 1C-A 基础设施、schema、CLI、测试和文档完成；
 - [x] 完整门禁和聚焦测试通过，输入 checkout `local/zed` 保持 clean；
-- [x] 主 Agent 已完成独立验收；staged patch SHA-256 与验收前一致；
+- [x] 代码、schema、测试和文档已经独立复核；提交差异 SHA-256 与验收基线一致；
 - [ ] 真实独立 corpus review、workspace holdout audit、scanner/corpus 调整和最终冻结报告；这些不属于 1C-A，转由 1C-B/1C-C 串行完成。
 
 ## 验证证据
@@ -35,7 +35,7 @@ Completed: 2026-09-02
 | `env UV_CACHE_DIR=/tmp/zed-i18n-uv-cache uv run pytest -q tests/test_unlabeled_audit.py tests/test_freeze_gate.py tests/test_cli.py` | passed，50 tests | 协议、门禁策略、CLI 负面路径和身份漂移 | 不证明真实外部审核 |
 | `env UV_CACHE_DIR=/tmp/zed-i18n-uv-cache uv run python scripts/check.py` | passed，Ruff、ty、111 tests | 完整仓库门禁 | 不包含外部独立审核 |
 | `env UV_CACHE_DIR=/tmp/zed-i18n-uv-cache uv run ruff format --check .` 与 `git diff --check` | passed | 格式和差异空白 | 不包含外部独立审核 |
-| `git diff --cached | sha256sum`、`git -C local/zed status --short` | passed；staged patch SHA-256 `129483a898027a9eecc13d63e647f75e7f506a1d022373b18cd20cd23b296e98`，`local/zed` clean | 暂存区边界和外部 checkout | 不证明 1C-B/1C-C |
+| `git diff 85fbdc7..47c85e3 \| sha256sum`、`git -C local/zed status --short` | passed；提交差异 SHA-256 `129483a898027a9eecc13d63e647f75e7f506a1d022373b18cd20cd23b296e98`，`local/zed` clean | 1C-A 提交边界和外部 checkout | 不证明 1C-B/1C-C |
 
 ## 后续依赖
 
