@@ -1,0 +1,132 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://zed-i18n-kit.invalid/schemas/scan-result-v1.schema.json",
+    "title": "zed-i18n-kit scan result v1",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["schema_version", "metadata", "occurrences"],
+    "properties": {
+        "schema_version": {"const": 1},
+        "metadata": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "zed_commit",
+                "tool_version",
+                "rule_pack_version",
+                "config_hash",
+                "scan_scope",
+                "source_files",
+                "capability_probes"
+            ],
+            "properties": {
+                "zed_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+                "tool_version": {"type": "string", "minLength": 1},
+                "rule_pack_version": {"type": "string", "minLength": 1},
+                "config_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                "scan_scope": {
+                    "type": "array",
+                    "minItems": 1,
+                    "uniqueItems": true,
+                    "items": {"$ref": "#/$defs/sourcePath"}
+                },
+                "source_files": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {"$ref": "#/$defs/sourceFileSnapshot"}
+                },
+                "capability_probes": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {"$ref": "#/$defs/capabilityProbe"}
+                }
+            }
+        },
+        "occurrences": {"type": "array", "items": {"$ref": "#/$defs/occurrence"}}
+    },
+    "$defs": {
+        "sourcePath": {
+            "type": "string",
+            "pattern": "^crates/(?:(?!\\.{1,2}(?:/|$))[^/]+/)*(?!\\.{1,2}(?:/|$))[^/]+\\.rs$"
+        },
+        "sourceSpan": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["start_byte", "end_byte"],
+            "properties": {
+                "start_byte": {"type": "integer", "minimum": 0},
+                "end_byte": {"type": "integer", "minimum": 1}
+            }
+        },
+        "sourceFileSnapshot": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "sha256"],
+            "properties": {
+                "path": {"$ref": "#/$defs/sourcePath"},
+                "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+            }
+        },
+        "capabilityProbe": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["probe_id", "status", "details"],
+            "properties": {
+                "probe_id": {"type": "string", "minLength": 1},
+                "status": {"enum": ["passed", "failed"]},
+                "details": {"type": "string", "minLength": 1}
+            }
+        },
+        "provenanceRange": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "source_span"],
+            "properties": {
+                "path": {"$ref": "#/$defs/sourcePath"},
+                "source_span": {"$ref": "#/$defs/sourceSpan"}
+            }
+        },
+        "ruleEvidence": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["rule_id", "reason"],
+            "properties": {
+                "rule_id": {"type": "string", "minLength": 1},
+                "reason": {"type": "string", "minLength": 1}
+            }
+        },
+        "occurrence": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "occurrence_id",
+                "path",
+                "primary_span",
+                "syntax_kind",
+                "sink_symbol",
+                "text_slot",
+                "disposition",
+                "provenance",
+                "evidence"
+            ],
+            "properties": {
+                "occurrence_id": {"type": "string", "minLength": 1},
+                "path": {"$ref": "#/$defs/sourcePath"},
+                "primary_span": {"$ref": "#/$defs/sourceSpan"},
+                "syntax_kind": {"type": "string", "minLength": 1},
+                "sink_symbol": {"type": ["string", "null"], "minLength": 1},
+                "text_slot": {"type": ["string", "null"], "minLength": 1},
+                "disposition": {"enum": ["confirmed", "review_required", "excluded"]},
+                "provenance": {
+                    "type": "array",
+                    "items": {"$ref": "#/$defs/provenanceRange"}
+                },
+                "evidence": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {"$ref": "#/$defs/ruleEvidence"}
+                }
+            }
+        }
+    }
+}

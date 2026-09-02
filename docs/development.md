@@ -12,11 +12,19 @@
 uv sync --locked --all-groups
 ```
 
-运行当前 CLI 占位入口：
+运行只读阶段 1A CLI：
 
 ```bash
-uv run zed-i18n-kit
+uv run zed-i18n-kit corpus-check --zed local/zed
+uv run zed-i18n-kit scan --zed local/zed --output /tmp/zed-scan.json
+uv run zed-i18n-kit evaluate \
+  --corpus corpus/zed-ui-text/v2 \
+  --scan-result /tmp/zed-scan.json \
+  --zed local/zed \
+  --output /tmp/zed-evaluation.json
 ```
+
+`scan` 只读取输入 checkout；`evaluate` 会重新核对 commit 和扫描范围内每个文件的 SHA-256。评估报告标记为 `prototype-observational-v1`，其中 `observational_metrics` 与 `independently_reviewed_metrics` 明确分离，不能直接作为阶段 1C 自动确认门禁。
 
 ## 2. 统一质量门禁
 
@@ -39,7 +47,7 @@ uv run python scripts/check.py
 uv run ruff format --check .
 uv run ruff check .
 uv run ty check
-uv run pytest -q tests/test_check_script.py
+uv run python -m pytest -q tests/test_check_script.py
 ```
 
 阶段 0.5 corpus 命令：
@@ -48,6 +56,15 @@ uv run pytest -q tests/test_check_script.py
 # 校验唯一的 v2 corpus、固定 commit、相关源码摘要和 byte span
 uv run python scripts/check_golden_corpus.py --zed local/zed
 ```
+
+阶段 1A 真实源码闭环：
+
+```bash
+# 校验 16 个 CST fixture、重复扫描、scan-result round trip、snapshot 和评估
+uv run python scripts/check_scan_evaluation_contract.py --zed local/zed
+```
+
+该检查允许 capability probe 如实报告与目标节点不相交的 grammar parse error；命中 error subtree 的调用始终跳过。当前 `tree-sitter-rust 0.24.2` 对 `editor.rs` 的 `dyn 'static + Fn` 留有已记录解析缺口，详见 [ADR 0006](decisions/0006-tree-sitter-rust-cst-backend.md)。
 
 `corpus/zed-ui-text/v2/samples.jsonl` 是人工审核的唯一语料事实来源，manifest 固定其 SHA-256、覆盖配额和相关 Rust 文件摘要。修改样本或 Zed commit 时必须在同一工作项中更新 manifest，并通过 checkout 校验；项目不读取或迁移 v1。
 
@@ -65,7 +82,7 @@ uv run ruff format .
 | --- | --- | --- |
 | 源码 | `src/`、`rules/`、`runtime-template/` | 是 |
 | 规格与决策 | `docs/work/`、`docs/decisions/` | 是 |
-| 受控数据 | `schemas/`、审核后的 inventory/catalog | 是 |
+| 受控数据 | `src/zed_i18n_kit/schemas/`、审核后的 inventory/catalog | 是 |
 | 外部输入 | `local/zed` | 否，由其上游 Git 管理 |
 | 派生工作区 | `.worktrees/` 或仓库外临时目录 | 否 |
 | 构建与报告 | `artifacts/`、coverage、trace | 默认否 |

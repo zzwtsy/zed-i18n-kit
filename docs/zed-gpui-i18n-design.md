@@ -54,9 +54,9 @@ UI 文本候选 IR
 
 ### 3.1 当前项目状态
 
-`zed-i18n-kit` 当前已完成阶段 0 和阶段 0.5：针对固定 Zed commit 建立了唯一的 corpus v2，共 266 条版本化 UI 文本参考样本，并实现严格运行时校验、源码摘要、精确 byte span 和小型内存评估器。Tree-sitter 扫描器、持久化 scan-result 协议、persistent inventory、运行时和 Overlay 尚未实现。`local/zed` 是一个独立且完整的 Zed Rust workspace，并通过当前仓库的 `.gitignore` 排除。
+`zed-i18n-kit` 当前已完成阶段 0、阶段 0.5 和阶段 1A：针对固定 Zed commit 建立了唯一的 corpus v2，共 266 条版本化 UI 文本参考样本；Tree-sitter Rust 原型使用 16 条风险样本校准 CST 与 canonical span，并建立严格、确定性的 `scan-result-v1`、snapshot 校验、评估报告和只读 CLI。Persistent inventory、完整扫描规则、运行时和 Overlay 尚未实现。`local/zed` 是一个独立且完整的 Zed Rust workspace，并通过当前仓库的 `.gitignore` 排除。
 
-阶段 0.5 证明了 occurrence、sink、所有权和源码作用域必须共同参与判断，并解决了 subject kind、多文本槽位、源码快照和基础指标建模。但实施复盘也确认，canonical CST span、nullable origin constraint、corpus 外发现、自动确认覆盖率和独立复核门禁仍需由真实 Tree-sitter 原型闭合。后续不推翻总体架构，而是先完成阶段 1A 协议闭环，再扩大扫描规则。
+阶段 1A 已确认 occurrence、sink、所有权和源码作用域必须共同参与判断，并闭合 canonical CST span、nullable origin constraint、corpus 外发现和 auto-confirm coverage 的协议语义。当前 10 文件原型仍有 21 个同路径 candidate 样本未覆盖、44 个 unlabeled occurrence 待审计，且 266 条样本均未独立复核；这些数字是阶段 1B/1C 的工作输入，不是质量门禁通过声明。
 
 这意味着系统应划分为持久资产、外部输入和派生工作区三个边界：
 
@@ -668,7 +668,7 @@ zed-i18n check
 
 阶段 0.5 后复盘确认，现有 span 尚未全部由 canonical CST 节点规则验证，nullable origin constraint、未配对 occurrence 和自动确认覆盖门禁也仍是原型语义。该结果只建立阶段 1 的评估地基，不代表持久 scan-result 契约已经冻结；调整决定见 [ADR 0005](decisions/0005-phase-1-evaluation-loop-first.md)。
 
-### 阶段 1A：扫描评估协议闭环
+### 阶段 1A：扫描评估协议闭环（已完成）
 
 - 接入 Tree-sitter Rust，使用 10～20 个代表性真实样本验证 CST range；
 - 固定 primary span、provenance span、wrapper 归一化和 nullable origin constraint；
@@ -677,6 +677,10 @@ zed-i18n check
 - 区分 unmatched、ambiguous、invalid 和 unlabeled occurrence；
 - 增加 auto-confirm coverage 与 review-state-aware 指标；
 - 不以规则覆盖率为目标，不生成目录，不改写源码。
+
+阶段 1A 在固定 Zed commit 上验证了 16 个风险 CST fixture，并由扫描完整 10 个目标文件得到 56 条确定性 occurrence。11 条风险 candidate 全部通过 primary/provenance 对齐；scope/origin 反例不产生候选，符号型 child 反例明确输出 `excluded`。评估覆盖同路径 39 条 corpus 样本：匹配 13、candidate unmatched 21、ambiguous 0、unlabeled 44。auto-confirm coverage 为 `undefined (0/0)`，因此所有结果仅为 observational。
+
+Tree-sitter 后端及已知 grammar 限制记录在 [ADR 0006](decisions/0006-tree-sitter-rust-cst-backend.md)。阶段 1B 必须继续扩大 discovery、符号解析和规则覆盖，不得把这个 typed prototype 包装成完整 Zed 扫描器。
 
 ### 阶段 1B：只读扫描器
 
@@ -835,4 +839,4 @@ zed-i18n check
 
 在上述闭环建立前，不应批量替换整个 Zed workspace，不应维护长期修改分支，不应把旧 patch 当作新版输入，不应把 runtime 字符串拦截当作生产翻译方案，也不应把完整 rust-analyzer/HIR 集成作为第一阶段前置条件。
 
-当前主攻方向是阶段 1A，而不是同时扩充 rule pack、CLI 和语义后端。canonical span 必须由真实 Tree-sitter 端到端原型确定；在 snapshot、匹配分类、coverage 和独立复核门禁闭合之前，现有阶段 0.5 指标只能作为探索性证据。
+当前主攻方向是阶段 1B 的 discovery、作用域和 typed rule 扩展，而不是提前实现 Overlay、runtime 或完整 HIR 后端。阶段 1A 已固定 canonical span、snapshot 和匹配分类；但现有指标仍只有探索意义，必须等阶段 1C 建立独立复核子集、审计 unlabeled occurrence 并确定 precision/coverage 门禁后，才能冻结自动确认规则。

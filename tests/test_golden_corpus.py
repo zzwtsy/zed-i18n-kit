@@ -11,10 +11,14 @@ from zed_i18n_kit.golden import (
     validate_checkout,
     validate_schema_contract,
 )
+from zed_i18n_kit.schema_resources import (
+    GOLDEN_CORPUS_SCHEMA_NAME,
+    schema_resource,
+)
 
 PROJECT_ROOT = Path(__file__).parents[1]
 CORPUS_DIR = PROJECT_ROOT / "corpus/zed-ui-text/v2"
-SCHEMA_PATH = PROJECT_ROOT / "schemas/golden-corpus-sample-v2.schema.json"
+SCHEMA_RESOURCE = schema_resource(GOLDEN_CORPUS_SCHEMA_NAME)
 
 
 def test_repository_corpus_has_baseline_and_risk_boundaries() -> None:
@@ -44,11 +48,11 @@ def test_repository_corpus_has_baseline_and_risk_boundaries() -> None:
 
 
 def test_schema_matches_runtime_contract() -> None:
-    validate_schema_contract(SCHEMA_PATH)
+    validate_schema_contract(SCHEMA_RESOURCE)
 
 
 def test_schema_drift_is_rejected(tmp_path: Path) -> None:
-    schema: dict[str, object] = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+    schema: dict[str, object] = json.loads(SCHEMA_RESOURCE.read_text(encoding="utf-8"))
     required = schema["required"]
     assert isinstance(required, list)
     required.remove("review_state")

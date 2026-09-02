@@ -6,9 +6,9 @@
 
 ## 当前状态
 
-项目已经完成扫描器实施前的阶段 0.5 评估协议校准：当前唯一支持的 corpus schema 是 v2，共 266 条样本，并提供 UTF-8 byte span、文本槽位、源码摘要、exact span/provenance 匹配和固定指标计算。旧 v1 格式已删除，不提供兼容读取或迁移入口。CLI 仍是占位实现，尚不能扫描或改写 Zed。
+项目已经完成阶段 1A 扫描评估协议闭环：当前唯一支持的 corpus schema 是 v2，共 266 条样本；Tree-sitter Rust 原型使用其中 16 条高风险样本校准 canonical span，并提供持久 `scan-result-v1`、源码快照校验、exact span/provenance 评估和只读 CLI。旧 v1 corpus 格式已删除，不提供兼容读取或迁移入口。
 
-当前下一步是阶段 1A：先用 10～20 个代表性真实样本闭合 Tree-sitter CST、canonical span、持久 `scan-result-v1` 和评分报告，再扩展只读扫描规则。该阶段不生成翻译目录，也不修改源码。
+当前原型只扫描固定的 10 个 Zed 文件和 4 类内置 sink 语法，尚未实现 workspace discovery、通用符号/类型解析或完整规则覆盖。现有 266 条样本全部是 `single_review`，因此评估结果是 observational，auto-confirm coverage 分母为零，不能宣称达到自动确认门禁。下一步阶段 1B 才扩展只读扫描器；当前仍不生成翻译目录，也不修改源码。
 
 ## 核心边界
 
@@ -25,6 +25,7 @@
 uv sync --locked --all-groups
 uv run python scripts/check.py
 uv run python scripts/check_golden_corpus.py --zed local/zed
+uv run python scripts/check_scan_evaluation_contract.py --zed local/zed
 ```
 
 聚焦命令和环境说明见[开发指南](docs/development.md)。
@@ -42,12 +43,13 @@ uv run python scripts/check_golden_corpus.py --zed local/zed
 - [扫描器评估契约 ADR](docs/decisions/0003-scanner-evaluation-contract.md)
 - [直接切换 v2 ADR](docs/decisions/0004-direct-v2-cutover.md)
 - [阶段 1 评估闭环优先 ADR](docs/decisions/0005-phase-1-evaluation-loop-first.md)
+- [Tree-sitter Rust CST 后端 ADR](docs/decisions/0006-tree-sitter-rust-cst-backend.md)
 - [AI 工程化调研](docs/research/ai-engineering-governance.md)
 
 ## 目录方向
 
 ```text
-src/zed_i18n_kit/   Python 分析与生成工具
+src/zed_i18n_kit/   Python 分析工具及随 wheel 发布的 schema
 rules/              Zed/GPUI domain rule packs
 schemas/            Inventory、trace 与迁移格式
 runtime-template/   注入派生工作区的最小 Rust runtime

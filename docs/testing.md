@@ -151,6 +151,9 @@ corpus 阈值是回归门禁，不得表述为完整 Zed workspace 的统计准�
 - corpus v2 schema 与运行时模型漂移检查；
 - 生成后 clean-worktree 检查；
 - 在固定 Zed checkout 可用时执行 corpus 源码摘要/span 校验。
+- `scan-result-v1` 严格 schema、确定性 I/O、snapshot 与 UTF-8 span 负面控制；
+- 合成 Rust CST/typed scanner fixtures；
+- 在固定 Zed checkout 可用时执行 `scripts/check_scan_evaluation_contract.py` 的 16 样本闭环。
 
 ### 扫描器阶段
 

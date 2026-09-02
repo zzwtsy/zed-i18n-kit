@@ -71,7 +71,7 @@
 
 - manifest：`corpus/zed-ui-text/v2/manifest.json`
 - 样本：`corpus/zed-ui-text/v2/samples.jsonl`
-- schema：`schemas/golden-corpus-sample-v2.schema.json`
+- schema：`src/zed_i18n_kit/schemas/golden-corpus-sample-v2.schema.json`
 - 当前格式决定：[ADR 0003](../decisions/0003-scanner-evaluation-contract.md) 与 [ADR 0004](../decisions/0004-direct-v2-cutover.md)
 
 验证固定 checkout：
@@ -119,5 +119,5 @@ uv run python scripts/check_golden_corpus.py --zed local/zed
 持久资产：
 
 - v2 manifest 与样本：`corpus/zed-ui-text/v2/manifest.json`、`samples.jsonl`
-- v2 schema：`schemas/golden-corpus-sample-v2.schema.json`
+- v2 schema：`src/zed_i18n_kit/schemas/golden-corpus-sample-v2.schema.json`
 - 完成工作项：[阶段 0.5 评估协议与风险样本校准](../work/completed/2026-09-01-phase-0-5-evaluation-contract.md)

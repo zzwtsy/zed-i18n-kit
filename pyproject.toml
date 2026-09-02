@@ -7,7 +7,10 @@ authors = [
     { name = "zzwtsy", email = "zzwtsy@yumdeb.top" }
 ]
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "tree-sitter>=0.26.0",
+    "tree-sitter-rust>=0.24.2",
+]
 
 [project.scripts]
 zed-i18n-kit = "zed_i18n_kit:main"
@@ -48,4 +51,5 @@ possibly-unresolved-reference = "warn"
 unsound-return-statement = "error"
 
 [tool.pytest.ini_options]
+pythonpath = ["."]
 testpaths = ["tests"]

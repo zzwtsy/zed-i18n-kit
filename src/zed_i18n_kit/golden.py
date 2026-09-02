@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path, PurePosixPath
 
+from .schema_resources import SchemaResource
+
 
 class GoldenCorpusError(ValueError):
     """Raised when the golden corpus violates its persistent contract."""
@@ -251,7 +253,7 @@ def validate_checkout(corpus: GoldenCorpus, zed_root: Path) -> None:
             )
 
 
-def validate_schema_contract(schema_path: Path) -> None:
+def validate_schema_contract(schema_path: SchemaResource) -> None:
     schema = _load_json_object(
         schema_path.read_text(encoding="utf-8"), str(schema_path)
     )

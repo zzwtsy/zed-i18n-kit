@@ -3,7 +3,7 @@
   "zed_commit": "2551721adb5b5187bc27cfae0fbe47f0ed4c5397",
   "sample_file": "samples.jsonl",
   "sample_count": 266,
-  "sample_sha256": "b1ffdf676a52eb107be502c8f4bc2b160ce9652c4d378f8de254e712a5c8f36d",
+  "sample_sha256": "01eccfad9d4c38ff08856bca151e9ae9b2a6c99a505ef9d0c6f731960727e81f",
   "source_files_sha256": {
     "crates/agent_ui/src/conversation_view/elicitation.rs": "d34c92b2fe8f95b8261c6fdfafd5b2a98aef1a853f7a08f0f488bf609c4684e8",
     "crates/agent_ui/src/conversation_view/thread_view.rs": "2baac5355e7877001f5f407745905d704a0caf110ecc0f9546cb29d0ef7f121d",
