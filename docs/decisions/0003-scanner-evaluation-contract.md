@@ -108,3 +108,7 @@ MVP 对外只输出 `confirmed`、`review_required` 和 `excluded`。内部若�
 - rust-analyzer/HIR 后端成为默认语义来源并提供不同的稳定身份模型。
 - Zed 上游提供正式 i18n API，使文本槽位和消息身份能够由类型系统直接表达。
 - 独立抽样审计证明现有 corpus 分层与真实误报、漏报模式显著偏离。
+
+## 后续关系
+
+[ADR 0004](0004-direct-v2-cutover.md) 取消了本 ADR 中“继续读取和验证 v1”的兼容后果；评估单元、文本槽位、匹配和指标决定继续有效。

@@ -140,11 +140,12 @@ git diff --check
 - Ruff lint；
 - ty；
 - pytest；
-- 生成后 clean-worktree 检查。
+- corpus v2 schema 与运行时模型漂移检查；
+- 生成后 clean-worktree 检查；
+- 在固定 Zed checkout 可用时执行 corpus 源码摘要/span 校验。
 
 ### 扫描器阶段
 
-- corpus schema 与运行时模型漂移检查；
 - 精确 checkout、source span 与 provenance 匹配；
 - auto-confirm precision、candidate recall、unsafe promotion、exclusion leakage 和 unmatched 门禁；
 - 独立抽样审计报告；

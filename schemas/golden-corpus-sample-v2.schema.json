@@ -1,31 +1,47 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://example.invalid/zed-i18n-kit/golden-corpus-sample-v1.schema.json",
-  "title": "Zed UI text golden sample v1",
+  "$id": "https://example.invalid/zed-i18n-kit/golden-corpus-sample-v2.schema.json",
+  "title": "Zed UI text golden sample v2",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "id",
     "path",
-    "line",
+    "source_span",
     "anchor",
     "scope",
+    "subject_kind",
     "sink_symbol",
+    "text_slot",
     "sink_kind",
     "features",
     "ownership",
-    "decision",
+    "expected_presence",
+    "expected_disposition",
+    "review_state",
     "rationale"
   ],
   "properties": {
     "id": { "type": "string", "pattern": "^zed-[0-9a-f]{7}-[0-9]{4}$" },
     "path": { "type": "string", "pattern": "^crates/.+\\.rs$" },
-    "line": { "type": "integer", "minimum": 1 },
+    "source_span": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start_byte", "end_byte"],
+      "properties": {
+        "start_byte": { "type": "integer", "minimum": 0 },
+        "end_byte": { "type": "integer", "minimum": 1 }
+      }
+    },
     "anchor": { "type": "string", "minLength": 1 },
     "scope": {
       "enum": ["production", "test", "example", "component_preview"]
     },
+    "subject_kind": {
+      "enum": ["sink_slot", "expression_origin", "scope_exclusion"]
+    },
     "sink_symbol": { "type": ["string", "null"] },
+    "text_slot": { "type": ["string", "null"] },
     "sink_kind": {
       "enum": [
         "visible_text",
@@ -75,7 +91,13 @@
         "unknown"
       ]
     },
-    "decision": { "enum": ["confirmed", "review_required", "excluded"] },
+    "expected_presence": { "enum": ["candidate", "not_candidate"] },
+    "expected_disposition": {
+      "enum": ["confirmed", "review_required", "excluded"]
+    },
+    "review_state": {
+      "enum": ["single_review", "independently_reviewed", "disputed"]
+    },
     "rationale": { "type": "string", "minLength": 1 }
   }
 }

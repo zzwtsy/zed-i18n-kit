@@ -1,0 +1,75 @@
+{
+  "schema_version": 2,
+  "zed_commit": "2551721adb5b5187bc27cfae0fbe47f0ed4c5397",
+  "sample_file": "samples.jsonl",
+  "sample_count": 266,
+  "sample_sha256": "b1ffdf676a52eb107be502c8f4bc2b160ce9652c4d378f8de254e712a5c8f36d",
+  "source_files_sha256": {
+    "crates/agent_ui/src/conversation_view/elicitation.rs": "d34c92b2fe8f95b8261c6fdfafd5b2a98aef1a853f7a08f0f488bf609c4684e8",
+    "crates/agent_ui/src/conversation_view/thread_view.rs": "2baac5355e7877001f5f407745905d704a0caf110ecc0f9546cb29d0ef7f121d",
+    "crates/agent_ui/src/diagnostics.rs": "79107ae92a9388ff40f038ba56566fbc80f1806a996bf92e96489a5af4e0d4eb",
+    "crates/agent_ui/src/inline_assistant.rs": "2077c06e5b1240c8a5be4a903852f89c362a91e62cbd65f3ae277d5b797ef774",
+    "crates/anthropic/src/anthropic.rs": "0cc709a7d905fa3260575d8e52e58b618e4427723c141d7d85ea32275f8bb3cb",
+    "crates/component_preview/src/component_preview.rs": "a3c9d72d95af06df54251ecf072a61a22c900383f556b9fb2b3ce1eac0b107fa",
+    "crates/editor/src/editor.rs": "61443ff35a185f06e6db15d0601bf7f2ad748d446e41a6512f4e189af5aa672b",
+    "crates/editor/src/editor_tests.rs": "acaa5d70f6ba14452a7e80e9b3ab32df68b99934dbf850e155dbb6545cc86d41",
+    "crates/git_ui/src/branch_picker.rs": "a6fa05e56ed8fc4551a61de98620dba0ce2708bfe92bb74c0fd6bd14d4e15337",
+    "crates/git_ui/src/git_graph.rs": "77e941d903e3c0498ec5f64cf393fba60cbfdf0eb87498cbdf49d691369d8924",
+    "crates/git_ui/src/git_panel.rs": "52ea324244a74c81374ea1d05c65eabe10a9b472d687346775213f46185dbdad",
+    "crates/git_ui/src/git_ui.rs": "a0f3b2321823154fd9c57a9facd38618efa19b7b38d5fac98636cdb05fd7b87e",
+    "crates/git_ui/src/project_diff.rs": "ae64202d8880844ed067f63ac3fa25aa307ef98c651a1edccef89237422f11b1",
+    "crates/go_to_line/src/cursor_position.rs": "f5ee715816f2d6e445a555a464b17d1078449ba526ce15e0012615f0943cdb31",
+    "crates/go_to_line/src/go_to_line.rs": "a8ed3a1393c337b1aa725775a7c53c9c9da013ad245973ffb5fb8a5bc3fb5390",
+    "crates/gpui/examples/data_table.rs": "da44c6782a63d7d5e6ef349612cb263a32e930ec1247aad9eff6bf712ec4e341",
+    "crates/gpui/examples/window.rs": "791ec50ee1e824c224da8609ff72241518ddeb4a38b80fb50bc46498283dd1da",
+    "crates/notifications/src/status_toast.rs": "527b5f102240473a98a4c95461a602b4e0fda27433c401cdbc9d99be859cffe6",
+    "crates/project/src/lsp_store.rs": "09c9c3eeb7cf3af19cefbffc9bdca37174b5d1d1cb4dd70779279937c1afd825",
+    "crates/project_panel/src/project_panel.rs": "1042272547836c5bbd746131b438a0666f15d979e34d2d9ed5ed16833dbc261a",
+    "crates/project_panel/src/project_panel_tests.rs": "4d7d9c07b2cf336fd991dfd49444c1714e9f21f3d21223a26e9cfeb0b14d2b44",
+    "crates/settings_ui/src/components/input_field.rs": "10bd07ddaed1aec86fc5ae51ad0f120cf32f4f71cb04ecba7cac8c36eb3d6ca0",
+    "crates/settings_ui/src/components/number_field.rs": "cf6214171fff533707ea537f0005260fb397f62afa0d20888eaa21375e7bd174",
+    "crates/settings_ui/src/components/ollama_model_picker.rs": "5dc6707b491227c6541f74ac958b7e2c91c49b155d577e16b1ada8dec0e60281",
+    "crates/settings_ui/src/pages/edit_prediction_provider_setup.rs": "c239c85cf3c0cc75a0d47c1ef33d9675b711b4ef82779bc79fe7eddcfb1269cb",
+    "crates/settings_ui/src/pages/llm_providers_page.rs": "0b57b5dbfb8d2098844b05d577fdc079cafc0c98c23d375a79359dae6ac6d0ee",
+    "crates/settings_ui/src/pages/mcp_servers_page.rs": "121d2cc8b37f39459a538fb79585d79c1dab9f48c8361db346519e8e6e2db90e",
+    "crates/settings_ui/src/pages/tool_permissions_setup.rs": "a84637cc832ed86f6c4354c4a398e9441d7e2da43e2ecf3615c9de9cc2226bf7",
+    "crates/settings_ui/src/settings_ui.rs": "0b9e31783a6c7fadd45c57b9da5f1099901958c5f95c5fe006362c0806766835",
+    "crates/ui/src/components/button/button.rs": "7226f9dbff279fc21a932aef56a56f0d90482abafda50342f04a842713f54fd6",
+    "crates/ui/src/components/collab/collab_notification.rs": "c845ad38a35e0354b7a658a59697fb2cfc027bf433edda7bc176abf959cdc71a",
+    "crates/ui/src/components/project_empty_state.rs": "05bdbcad048113d1d3ce77108ddab03239770dee829db83e70cfa4bc53bfaedf",
+    "crates/workspace/src/invalid_item_view.rs": "f3e34433483fa85f4c859f34ee5406e52350acd17bfd3dcbabe8d45934bf1604",
+    "crates/workspace/src/notifications.rs": "1b50db236e8c3341185177d7d952388881c324b6645a46ccd70b5ba3e07ede1c",
+    "crates/workspace/src/pane.rs": "b5ad7afbdf262e1dade92fae1be9b207d7ed1a5379be2b927badf3c1905d2cb4",
+    "crates/workspace/src/security_modal.rs": "ddd537d419b4e5779ec46db49261473beefa63706de045066837cdb2fd43b859",
+    "crates/workspace/src/status_bar.rs": "994546c1252c7a09a71d268a755b069ff5763cceaa0baead9300e3bba0b289dc",
+    "crates/workspace/src/tasks.rs": "c49b76dce22c0a05398cf59f928c2b0c46ca3a599713f5df33af1ef7af1cc38b",
+    "crates/workspace/src/welcome.rs": "a912901c7697b7e29d2f1dc3ac98844fe2583dcfac94f6b1e550f34255e10037",
+    "crates/workspace/src/workspace.rs": "37d05e9fe426a156d4f54c5212780eaaa5141b2b4881d2460e92fe1d42dda18b"
+  },
+  "minimum_counts": {
+    "expected_presence": {
+      "candidate": 190,
+      "not_candidate": 60
+    },
+    "expected_disposition": {
+      "confirmed": 140,
+      "review_required": 50,
+      "excluded": 60
+    },
+    "subject_kind": {
+      "sink_slot": 100,
+      "expression_origin": 20,
+      "scope_exclusion": 30
+    },
+    "feature": {
+      "child_argument": 2,
+      "concatenation": 2,
+      "prompt": 10,
+      "test_scope": 10
+    },
+    "ownership": {
+      "user": 2,
+      "protocol": 2
+    }
+  }
+}

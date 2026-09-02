@@ -9,7 +9,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--corpus",
         type=Path,
-        default=Path("corpus/zed-ui-text/v1"),
+        default=Path("corpus/zed-ui-text/v2"),
         help="versioned corpus directory",
     )
     parser.add_argument(
@@ -32,7 +32,7 @@ def main() -> int:
 
     print(
         f"validated {len(corpus.samples)} samples against "
-        f"Zed {corpus.manifest.zed_commit}"
+        f"Zed {corpus.manifest.zed_commit} (schema v{corpus.manifest.schema_version})"
     )
     for dimension, values in sorted(corpus.counts().items()):
         if dimension == "path":

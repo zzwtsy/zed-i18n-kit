@@ -11,7 +11,7 @@ from pathlib import Path, PurePosixPath
 
 
 class GoldenCorpusError(ValueError):
-    """Raised when a golden corpus violates its persistent contract."""
+    """Raised when the golden corpus violates its persistent contract."""
 
 
 class Decision(StrEnum):
@@ -68,46 +68,85 @@ class Feature(StrEnum):
     EXAMPLE_SCOPE = "example_scope"
 
 
-@dataclass(frozen=True)
+class SubjectKind(StrEnum):
+    SINK_SLOT = "sink_slot"
+    EXPRESSION_ORIGIN = "expression_origin"
+    SCOPE_EXCLUSION = "scope_exclusion"
+
+
+class ExpectedPresence(StrEnum):
+    CANDIDATE = "candidate"
+    NOT_CANDIDATE = "not_candidate"
+
+
+class ReviewState(StrEnum):
+    SINGLE_REVIEW = "single_review"
+    INDEPENDENTLY_REVIEWED = "independently_reviewed"
+    DISPUTED = "disputed"
+
+
+@dataclass(frozen=True, slots=True, order=True)
+class SourceSpan:
+    start_byte: int
+    end_byte: int
+
+    def __post_init__(self) -> None:
+        if self.start_byte < 0:
+            raise GoldenCorpusError("source span start_byte cannot be negative")
+        if self.end_byte <= self.start_byte:
+            raise GoldenCorpusError(
+                "source span end_byte must be greater than start_byte"
+            )
+
+
+@dataclass(frozen=True, slots=True)
 class GoldenSample:
     sample_id: str
     path: PurePosixPath
-    line: int
+    source_span: SourceSpan
     anchor: str
     scope: SourceScope
+    subject_kind: SubjectKind
     sink_symbol: str | None
+    text_slot: str | None
     sink_kind: SinkKind
     features: frozenset[Feature]
     ownership: Ownership
-    decision: Decision
+    expected_presence: ExpectedPresence
+    expected_disposition: Decision
+    review_state: ReviewState
     rationale: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class CoverageRequirement:
     dimension: str
     value: str
     minimum: int
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class CorpusManifest:
     schema_version: int
     zed_commit: str
     sample_file: str
     sample_count: int
     sample_sha256: str
+    source_files_sha256: Mapping[PurePosixPath, str]
     minimum_counts: tuple[CoverageRequirement, ...]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class GoldenCorpus:
     manifest: CorpusManifest
     samples: tuple[GoldenSample, ...]
 
     def counts(self) -> dict[str, Counter[str]]:
         counts: dict[str, Counter[str]] = {
-            "decision": Counter(),
+            "expected_presence": Counter(),
+            "expected_disposition": Counter(),
+            "review_state": Counter(),
+            "subject_kind": Counter(),
             "scope": Counter(),
             "sink_kind": Counter(),
             "ownership": Counter(),
@@ -116,7 +155,10 @@ class GoldenCorpus:
             "path": Counter(),
         }
         for sample in self.samples:
-            counts["decision"][sample.decision.value] += 1
+            counts["expected_presence"][sample.expected_presence.value] += 1
+            counts["expected_disposition"][sample.expected_disposition.value] += 1
+            counts["review_state"][sample.review_state.value] += 1
+            counts["subject_kind"][sample.subject_kind.value] += 1
             counts["scope"][sample.scope.value] += 1
             counts["sink_kind"][sample.sink_kind.value] += 1
             counts["ownership"][sample.ownership.value] += 1
@@ -125,6 +167,27 @@ class GoldenCorpus:
             for feature in sample.features:
                 counts["feature"][feature.value] += 1
         return counts
+
+
+SAMPLE_FIELDS = frozenset(
+    {
+        "id",
+        "path",
+        "source_span",
+        "anchor",
+        "scope",
+        "subject_kind",
+        "sink_symbol",
+        "text_slot",
+        "sink_kind",
+        "features",
+        "ownership",
+        "expected_presence",
+        "expected_disposition",
+        "review_state",
+        "rationale",
+    }
+)
 
 
 def load_corpus(corpus_dir: Path) -> GoldenCorpus:
@@ -152,29 +215,86 @@ def validate_checkout(corpus: GoldenCorpus, zed_root: Path) -> None:
             f"got {actual_commit}"
         )
 
-    line_cache: dict[PurePosixPath, list[str]] = {}
-    for sample in corpus.samples:
-        lines = line_cache.get(sample.path)
-        if lines is None:
-            source_path = zed_root / sample.path
-            if not source_path.is_file():
-                raise GoldenCorpusError(
-                    f"{sample.sample_id}: source file does not exist: {sample.path}"
-                )
-            lines = source_path.read_text(encoding="utf-8").splitlines()
-            line_cache[sample.path] = lines
+    source_cache: dict[PurePosixPath, bytes] = {}
+    for path, expected_sha256 in corpus.manifest.source_files_sha256.items():
+        source_path = zed_root / path
+        if not source_path.is_file():
+            raise GoldenCorpusError(f"source file does not exist: {path}")
+        source_bytes = source_path.read_bytes()
+        actual_sha256 = hashlib.sha256(source_bytes).hexdigest()
+        if actual_sha256 != expected_sha256:
+            raise GoldenCorpusError(
+                f"{path}: source SHA-256 mismatch: expected "
+                f"{expected_sha256}, got {actual_sha256}"
+            )
+        source_cache[path] = source_bytes
 
-        if sample.line > len(lines):
+    for sample in corpus.samples:
+        source_bytes = source_cache[sample.path]
+        span = sample.source_span
+        if span.end_byte > len(source_bytes):
             raise GoldenCorpusError(
-                f"{sample.sample_id}: line {sample.line} exceeds "
-                f"{sample.path} line count {len(lines)}"
+                f"{sample.sample_id}: source span ends at {span.end_byte}, "
+                f"past {sample.path} byte length {len(source_bytes)}"
             )
-        source_line = lines[sample.line - 1]
-        if sample.anchor not in source_line:
+        anchor_bytes = source_bytes[span.start_byte : span.end_byte]
+        try:
+            anchor = anchor_bytes.decode("utf-8")
+        except UnicodeDecodeError as error:
             raise GoldenCorpusError(
-                f"{sample.sample_id}: anchor {sample.anchor!r} not found at "
-                f"{sample.path}:{sample.line}: {source_line.strip()!r}"
+                f"{sample.sample_id}: source span does not follow UTF-8 boundaries"
+            ) from error
+        if anchor != sample.anchor:
+            raise GoldenCorpusError(
+                f"{sample.sample_id}: source span contains {anchor!r}, "
+                f"expected anchor {sample.anchor!r}"
             )
+
+
+def validate_schema_contract(schema_path: Path) -> None:
+    schema = _load_json_object(
+        schema_path.read_text(encoding="utf-8"), str(schema_path)
+    )
+    required = schema.get("required")
+    if not isinstance(required, list) or set(required) != SAMPLE_FIELDS:
+        raise GoldenCorpusError(f"{schema_path}: required fields drifted from runtime")
+    properties = _as_string_mapping(
+        schema.get("properties"), f"{schema_path}: properties"
+    )
+    if set(properties) != SAMPLE_FIELDS:
+        raise GoldenCorpusError(f"{schema_path}: properties drifted from runtime")
+
+    enum_contracts: dict[str, type[StrEnum]] = {
+        "scope": SourceScope,
+        "subject_kind": SubjectKind,
+        "sink_kind": SinkKind,
+        "ownership": Ownership,
+        "expected_presence": ExpectedPresence,
+        "expected_disposition": Decision,
+        "review_state": ReviewState,
+    }
+    for field, enum_type in enum_contracts.items():
+        property_schema = _as_string_mapping(
+            properties[field], f"{schema_path}: properties.{field}"
+        )
+        actual = property_schema.get("enum")
+        expected = [member.value for member in enum_type]
+        if actual != expected:
+            raise GoldenCorpusError(
+                f"{schema_path}: {field} enum drifted from runtime: "
+                f"expected {expected}, got {actual}"
+            )
+
+    features_schema = _as_string_mapping(
+        properties["features"], f"{schema_path}: properties.features"
+    )
+    feature_items = _as_string_mapping(
+        features_schema.get("items"), f"{schema_path}: properties.features.items"
+    )
+    actual_features = feature_items.get("enum")
+    expected_features = [member.value for member in Feature]
+    if actual_features != expected_features:
+        raise GoldenCorpusError(f"{schema_path}: feature enum drifted from runtime")
 
 
 def _load_manifest(path: Path) -> CorpusManifest:
@@ -187,12 +307,13 @@ def _load_manifest(path: Path) -> CorpusManifest:
             "sample_file",
             "sample_count",
             "sample_sha256",
+            "source_files_sha256",
             "minimum_counts",
         },
         str(path),
     )
     schema_version = _require_int(raw, "schema_version", str(path))
-    if schema_version != 1:
+    if schema_version != 2:
         raise GoldenCorpusError(f"{path}: unsupported schema_version {schema_version}")
 
     zed_commit = _require_string(raw, "zed_commit", str(path))
@@ -205,31 +326,43 @@ def _load_manifest(path: Path) -> CorpusManifest:
     if PurePosixPath(sample_file).name != sample_file:
         raise GoldenCorpusError(f"{path}: sample_file must be a local filename")
 
+    source_hashes_raw = _require_mapping(raw, "source_files_sha256", str(path))
+    source_hashes: dict[PurePosixPath, str] = {}
+    for source_path_raw, sha256_raw in source_hashes_raw.items():
+        source_path = _parse_source_path(source_path_raw, str(path))
+        if not isinstance(sha256_raw, str) or not _is_sha256(sha256_raw):
+            raise GoldenCorpusError(
+                f"{path}: invalid source SHA-256 for {source_path_raw}"
+            )
+        source_hashes[source_path] = sha256_raw
+
     minimum_counts_raw = _require_mapping(raw, "minimum_counts", str(path))
     requirements: list[CoverageRequirement] = []
     for dimension, values_raw in minimum_counts_raw.items():
         values = _as_string_mapping(values_raw, f"{path}: minimum_counts.{dimension}")
         for value, minimum_raw in values.items():
-            if not isinstance(minimum_raw, int) or isinstance(minimum_raw, bool):
+            if (
+                not isinstance(minimum_raw, int)
+                or isinstance(minimum_raw, bool)
+                or minimum_raw < 0
+            ):
                 raise GoldenCorpusError(
-                    f"{path}: minimum_counts.{dimension}.{value} must be an integer"
+                    f"{path}: minimum_counts.{dimension}.{value} "
+                    "must be a non-negative integer"
                 )
-            if minimum_raw < 0:
-                raise GoldenCorpusError(
-                    f"{path}: minimum_counts.{dimension}.{value} cannot be negative"
-                )
-            requirements.append(
-                CoverageRequirement(
-                    dimension=dimension, value=value, minimum=minimum_raw
-                )
-            )
+            requirements.append(CoverageRequirement(dimension, value, minimum_raw))
+
+    sample_sha256 = _require_string(raw, "sample_sha256", str(path))
+    if not _is_sha256(sample_sha256):
+        raise GoldenCorpusError(f"{path}: sample_sha256 must be lowercase SHA-256")
 
     return CorpusManifest(
         schema_version=schema_version,
         zed_commit=zed_commit,
         sample_file=sample_file,
-        sample_count=_require_int(raw, "sample_count", str(path)),
-        sample_sha256=_require_string(raw, "sample_sha256", str(path)),
+        sample_count=_require_positive_int(raw, "sample_count", str(path)),
+        sample_sha256=sample_sha256,
+        source_files_sha256=source_hashes,
         minimum_counts=tuple(requirements),
     )
 
@@ -240,82 +373,55 @@ def _load_samples(path: Path, text: str) -> Sequence[GoldenSample]:
         if not line_text.strip():
             raise GoldenCorpusError(f"{path}:{jsonl_line}: blank lines are not allowed")
         context = f"{path}:{jsonl_line}"
-        raw = _load_json_object(line_text, context)
-        samples.append(_parse_sample(raw, context))
+        samples.append(parse_sample(_load_json_object(line_text, context), context))
     return samples
 
 
-def _parse_sample(raw: Mapping[str, object], context: str) -> GoldenSample:
-    _require_exact_keys(
-        raw,
-        {
-            "id",
-            "path",
-            "line",
-            "anchor",
-            "scope",
-            "sink_symbol",
-            "sink_kind",
-            "features",
-            "ownership",
-            "decision",
-            "rationale",
-        },
-        context,
-    )
+def parse_sample(raw: Mapping[str, object], context: str) -> GoldenSample:
+    _require_exact_keys(raw, set(SAMPLE_FIELDS), context)
     sample_id = _require_string(raw, "id", context)
-    sample_id_parts = sample_id.split("-")
-    if (
-        len(sample_id_parts) != 3
-        or sample_id_parts[0] != "zed"
-        or len(sample_id_parts[1]) != 7
-        or any(char not in "0123456789abcdef" for char in sample_id_parts[1])
-        or len(sample_id_parts[2]) != 4
-        or not sample_id_parts[2].isdigit()
-    ):
-        raise GoldenCorpusError(f"{context}: invalid sample id {sample_id!r}")
+    _validate_sample_id(sample_id, context)
+    source_path = _parse_source_path(_require_string(raw, "path", context), context)
 
-    source_path = PurePosixPath(_require_string(raw, "path", context))
-    if source_path.is_absolute() or ".." in source_path.parts:
-        raise GoldenCorpusError(f"{context}: path must stay within the Zed checkout")
-    if not source_path.parts or source_path.parts[0] != "crates":
-        raise GoldenCorpusError(f"{context}: path must start with crates/")
+    span_raw = _require_mapping(raw, "source_span", context)
+    _require_exact_keys(span_raw, {"start_byte", "end_byte"}, f"{context}: source_span")
+    source_span = SourceSpan(
+        start_byte=_require_int(span_raw, "start_byte", f"{context}: source_span"),
+        end_byte=_require_int(span_raw, "end_byte", f"{context}: source_span"),
+    )
 
-    anchor = _require_string(raw, "anchor", context)
-    if "\n" in anchor or "\r" in anchor:
-        raise GoldenCorpusError(f"{context}: anchor must fit on one source line")
-
-    sink_symbol_raw = raw["sink_symbol"]
-    if sink_symbol_raw is not None and not isinstance(sink_symbol_raw, str):
-        raise GoldenCorpusError(f"{context}: sink_symbol must be a string or null")
-
-    features_raw = raw["features"]
-    if not isinstance(features_raw, list) or not features_raw:
-        raise GoldenCorpusError(f"{context}: features must be a non-empty array")
-    features: set[Feature] = set()
-    for feature_raw in features_raw:
-        if not isinstance(feature_raw, str):
-            raise GoldenCorpusError(f"{context}: feature values must be strings")
-        features.add(_parse_enum(Feature, feature_raw, f"{context}: features"))
-    if len(features) != len(features_raw):
-        raise GoldenCorpusError(f"{context}: duplicate features are not allowed")
+    sink_symbol = _optional_string(raw, "sink_symbol", context)
+    text_slot = _optional_string(raw, "text_slot", context)
+    features = _parse_features(raw["features"], context)
 
     return GoldenSample(
         sample_id=sample_id,
         path=source_path,
-        line=_require_positive_int(raw, "line", context),
-        anchor=anchor,
+        source_span=source_span,
+        anchor=_require_string(raw, "anchor", context),
         scope=_parse_enum(SourceScope, _require_string(raw, "scope", context), context),
-        sink_symbol=sink_symbol_raw,
+        subject_kind=_parse_enum(
+            SubjectKind, _require_string(raw, "subject_kind", context), context
+        ),
+        sink_symbol=sink_symbol,
+        text_slot=text_slot,
         sink_kind=_parse_enum(
             SinkKind, _require_string(raw, "sink_kind", context), context
         ),
-        features=frozenset(features),
+        features=features,
         ownership=_parse_enum(
             Ownership, _require_string(raw, "ownership", context), context
         ),
-        decision=_parse_enum(
-            Decision, _require_string(raw, "decision", context), context
+        expected_presence=_parse_enum(
+            ExpectedPresence,
+            _require_string(raw, "expected_presence", context),
+            context,
+        ),
+        expected_disposition=_parse_enum(
+            Decision, _require_string(raw, "expected_disposition", context), context
+        ),
+        review_state=_parse_enum(
+            ReviewState, _require_string(raw, "review_state", context), context
         ),
         rationale=_require_string(raw, "rationale", context),
     )
@@ -328,10 +434,17 @@ def _validate_corpus_invariants(corpus: GoldenCorpus, sample_path: Path) -> None
             f"got {len(corpus.samples)}"
         )
 
+    referenced_paths = {sample.path for sample in corpus.samples}
+    recorded_paths = set(corpus.manifest.source_files_sha256)
+    if referenced_paths != recorded_paths:
+        raise GoldenCorpusError(
+            f"{sample_path}: source_files_sha256 paths differ from sample paths"
+        )
+
     sample_ids: set[str] = set()
-    locations: set[tuple[PurePosixPath, int, str]] = set()
+    subjects: set[tuple[PurePosixPath, SourceSpan, str | None, str | None]] = set()
+    expected_id_prefix = f"zed-{corpus.manifest.zed_commit[:7]}-"
     for sample in corpus.samples:
-        expected_id_prefix = f"zed-{corpus.manifest.zed_commit[:7]}-"
         if not sample.sample_id.startswith(expected_id_prefix):
             raise GoldenCorpusError(
                 f"{sample_path}: sample id {sample.sample_id!r} does not match "
@@ -341,13 +454,18 @@ def _validate_corpus_invariants(corpus: GoldenCorpus, sample_path: Path) -> None
             raise GoldenCorpusError(f"{sample_path}: duplicate id {sample.sample_id}")
         sample_ids.add(sample.sample_id)
 
-        location = (sample.path, sample.line, sample.anchor)
-        if location in locations:
+        subject = (
+            sample.path,
+            sample.source_span,
+            sample.sink_symbol,
+            sample.text_slot,
+        )
+        if subject in subjects:
             raise GoldenCorpusError(
-                f"{sample_path}: duplicate source occurrence "
-                f"{sample.path}:{sample.line} {sample.anchor!r}"
+                f"{sample_path}: duplicate evaluation subject for {sample.sample_id}"
             )
-        locations.add(location)
+        subjects.add(subject)
+        _validate_sample_semantics(sample, sample_path)
 
     counts = corpus.counts()
     for requirement in corpus.manifest.minimum_counts:
@@ -363,6 +481,97 @@ def _validate_corpus_invariants(corpus: GoldenCorpus, sample_path: Path) -> None
                 f"coverage requirement {requirement.dimension}."
                 f"{requirement.value} >= {requirement.minimum} failed: got {actual}"
             )
+
+
+def _validate_sample_semantics(sample: GoldenSample, sample_path: Path) -> None:
+    if sample.expected_presence is ExpectedPresence.CANDIDATE:
+        if sample.expected_disposition not in {
+            Decision.CONFIRMED,
+            Decision.REVIEW_REQUIRED,
+        }:
+            raise GoldenCorpusError(
+                f"{sample_path}: {sample.sample_id}: candidate must be confirmed "
+                "or review_required"
+            )
+    elif sample.expected_disposition is not Decision.EXCLUDED:
+        raise GoldenCorpusError(
+            f"{sample_path}: {sample.sample_id}: not_candidate must be excluded"
+        )
+
+    if sample.subject_kind is SubjectKind.SINK_SLOT:
+        if sample.sink_symbol is None or sample.text_slot is None:
+            raise GoldenCorpusError(
+                f"{sample_path}: {sample.sample_id}: sink_slot requires sink_symbol "
+                "and text_slot"
+            )
+    if sample.text_slot is not None and sample.sink_symbol is None:
+        raise GoldenCorpusError(
+            f"{sample_path}: {sample.sample_id}: text_slot requires sink_symbol"
+        )
+    if sample.subject_kind is SubjectKind.SCOPE_EXCLUSION:
+        if sample.scope is SourceScope.PRODUCTION:
+            raise GoldenCorpusError(
+                f"{sample_path}: {sample.sample_id}: scope_exclusion cannot be production"
+            )
+        if sample.expected_presence is not ExpectedPresence.NOT_CANDIDATE:
+            raise GoldenCorpusError(
+                f"{sample_path}: {sample.sample_id}: scope_exclusion must be not_candidate"
+            )
+    if sample.review_state is ReviewState.DISPUTED:
+        if sample.expected_disposition is not Decision.REVIEW_REQUIRED:
+            raise GoldenCorpusError(
+                f"{sample_path}: {sample.sample_id}: disputed samples must require review"
+            )
+
+
+def _validate_sample_id(sample_id: str, context: str) -> None:
+    parts = sample_id.split("-")
+    if (
+        len(parts) != 3
+        or parts[0] != "zed"
+        or len(parts[1]) != 7
+        or any(char not in "0123456789abcdef" for char in parts[1])
+        or len(parts[2]) != 4
+        or not parts[2].isdigit()
+    ):
+        raise GoldenCorpusError(f"{context}: invalid sample id {sample_id!r}")
+
+
+def _parse_source_path(value: str, context: str) -> PurePosixPath:
+    source_path = PurePosixPath(value)
+    if source_path.is_absolute() or ".." in source_path.parts:
+        raise GoldenCorpusError(f"{context}: path must stay within the Zed checkout")
+    if not source_path.parts or source_path.parts[0] != "crates":
+        raise GoldenCorpusError(f"{context}: path must start with crates/")
+    if source_path.suffix != ".rs":
+        raise GoldenCorpusError(f"{context}: path must reference a Rust source file")
+    return source_path
+
+
+def _optional_string(raw: Mapping[str, object], key: str, context: str) -> str | None:
+    value = raw[key]
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise GoldenCorpusError(f"{context}: {key} must be a non-empty string or null")
+    return value
+
+
+def _parse_features(value: object, context: str) -> frozenset[Feature]:
+    if not isinstance(value, list) or not value:
+        raise GoldenCorpusError(f"{context}: features must be a non-empty array")
+    features: set[Feature] = set()
+    for raw_feature in value:
+        if not isinstance(raw_feature, str):
+            raise GoldenCorpusError(f"{context}: feature values must be strings")
+        features.add(_parse_enum(Feature, raw_feature, f"{context}: features"))
+    if len(features) != len(value):
+        raise GoldenCorpusError(f"{context}: duplicate features are not allowed")
+    return frozenset(features)
+
+
+def _is_sha256(value: str) -> bool:
+    return len(value) == 64 and all(char in "0123456789abcdef" for char in value)
 
 
 def _zed_commit(zed_root: Path) -> str:

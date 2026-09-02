@@ -67,12 +67,12 @@
 
 包括 Element ID、key context、日志、开发诊断、路径、URL、命令，以及默认扫描范围外的 test、example 和 component preview。作用域排除不表示其中的英文“不是可见文字”，而是表示它不属于生产翻译 inventory。
 
-## 6. 持久资产与使用
+## 6. 当前持久资产与使用
 
-- manifest：`corpus/zed-ui-text/v1/manifest.json`
-- 样本：`corpus/zed-ui-text/v1/samples.jsonl`
-- schema：`schemas/golden-corpus-sample-v1.schema.json`
-- 持久格式决定：[ADR 0002](../decisions/0002-phase-0-golden-corpus-format.md)
+- manifest：`corpus/zed-ui-text/v2/manifest.json`
+- 样本：`corpus/zed-ui-text/v2/samples.jsonl`
+- schema：`schemas/golden-corpus-sample-v2.schema.json`
+- 当前格式决定：[ADR 0003](../decisions/0003-scanner-evaluation-contract.md) 与 [ADR 0004](../decisions/0004-direct-v2-cutover.md)
 
 验证固定 checkout：
 
@@ -82,12 +82,12 @@ uv run python scripts/check_golden_corpus.py --zed local/zed
 
 校验器会检查 schema version、未知字段、枚举、样本与定位唯一性、JSONL SHA-256、覆盖配额、Zed commit、源码路径、行号和单行 anchor。它不会通过字符串内容推断标签，也不会宣称运行时覆盖。
 
-## 7. 已知限制
+## 7. 阶段 0 初始格式的已知限制
 
 - 语料是按当前 commit 固定的 occurrence，不跨版本复用行号。
 - 当前样本集中 `settings_ui` 和 `git_ui` 比重较高；manifest 使用最小配额防止关键小领域消失，但不声称按真实 UI 使用频率加权。
-- 多行 raw string、宏展开、跨函数 helper、字符串累积和由错误类型生成的 UI 文本仍需在阶段 1 后根据漏报补样。
-- tests、preview 和 example 的作用域主要由路径和已知组件边界标注；嵌在生产文件内部的 `#[cfg(test)]` 或 preview 实现仍需 parser 级作用域识别。
+- 初始 250 条样本不包含多行 raw string、跨函数 helper、字符串累积和由错误类型生成的 UI 文本；这些边界已在当前 corpus 加入校准样本，真正的 parser/rule 识别仍由阶段 1 验证。
+- 初始 tests、preview 和 example 作用域主要由路径和已知组件边界标注；当前 corpus 已加入生产文件内部 `#[cfg(test)]` 反例，但 parser 级作用域识别尚未实现。
 - 静态标签需要在后续 runtime trace 和真实 UI smoke 中校正，尤其是外部协议、用户内容和错误链。
 
 ## 8. 实施后设计复盘
@@ -102,4 +102,22 @@ uv run python scripts/check_golden_corpus.py --zed local/zed
 - 分层语料适合回归测试，但 `settings_ui` 和 `git_ui` 占比较高，不能据此宣称完整 Zed workspace 的统计准确率；
 - corpus v1 的 `(path, line, anchor)` 能保持人工可审计性，但新的阻塞评估需要精确 source span、origin/sink 角色和 review state。
 
-因此 v1 保持冻结，后续通过阶段 0.5 建立新 schema version 或显式迁移、补充风险样本并实现评估器。长期约束见 [ADR 0003：扫描器评估单元与文本槽位](../decisions/0003-scanner-evaluation-contract.md)。
+因此阶段 0.5 建立了新的评估协议并补充风险样本。项目尚未发布，最终按 [ADR 0004](../decisions/0004-direct-v2-cutover.md) 直接切换到 v2，不保留旧格式兼容层。
+
+## 9. 阶段 0.5 实施结果
+
+阶段 0.5 将初始样本一次性转换为当前 v2：
+
+- 250 条初始样本在固定 commit 上全部由行内唯一 anchor 转换为文件级 UTF-8 byte span；
+- 16 条风险样本覆盖 `.child()` receiver 正反例、Prompt message/detail/actions、`concat!`、`push_str`、跨行 raw string、跨函数 helper、内嵌 `#[cfg(test)]`、错误链以及 user/protocol 内容；
+- Prompt 的 message、optional detail 和三个 action 使用不同 value path，不再把整个调用视为一个候选；
+- v2 manifest 记录全部相关 Rust 文件 SHA-256，因此允许无关路径存在本地修改，同时会拒绝任何评估路径漂移；
+- 小型评估器以 primary span 匹配 sink/scope subject，以 provenance range 匹配 expression origin，并计算 ADR 0003 固定的五个核心指标。
+
+风险样本仍是单次 AI 辅助审核，`review_state=single_review` 如实保留这一边界。它们用于规则回归校准，不构成 Zed 全量准确率估计，也不替代规则冻结后的独立抽样审计。
+
+持久资产：
+
+- v2 manifest 与样本：`corpus/zed-ui-text/v2/manifest.json`、`samples.jsonl`
+- v2 schema：`schemas/golden-corpus-sample-v2.schema.json`
+- 完成工作项：[阶段 0.5 评估协议与风险样本校准](../work/completed/2026-09-01-phase-0-5-evaluation-contract.md)

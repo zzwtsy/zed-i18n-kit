@@ -5,56 +5,89 @@ from pathlib import Path
 
 import pytest
 
-from zed_i18n_kit.golden import GoldenCorpusError, load_corpus, validate_checkout
+from zed_i18n_kit.golden import (
+    GoldenCorpusError,
+    load_corpus,
+    validate_checkout,
+    validate_schema_contract,
+)
 
 PROJECT_ROOT = Path(__file__).parents[1]
-CORPUS_DIR = PROJECT_ROOT / "corpus/zed-ui-text/v1"
+CORPUS_DIR = PROJECT_ROOT / "corpus/zed-ui-text/v2"
+SCHEMA_PATH = PROJECT_ROOT / "schemas/golden-corpus-sample-v2.schema.json"
 
 
-def test_repository_corpus_has_fixed_size_and_required_boundaries() -> None:
+def test_repository_corpus_has_baseline_and_risk_boundaries() -> None:
     corpus = load_corpus(CORPUS_DIR)
 
+    assert corpus.manifest.schema_version == 2
     assert corpus.manifest.zed_commit == "2551721adb5b5187bc27cfae0fbe47f0ed4c5397"
-    assert len(corpus.samples) == 250
-    assert corpus.counts()["decision"] == {
-        "confirmed": 140,
-        "review_required": 50,
-        "excluded": 60,
+    assert len(corpus.samples) == 266
+    assert corpus.counts()["expected_disposition"] == {
+        "confirmed": 145,
+        "review_required": 57,
+        "excluded": 64,
     }
-    assert corpus.counts()["scope"] == {
-        "production": 220,
-        "test": 10,
-        "component_preview": 10,
-        "example": 10,
+    assert corpus.counts()["expected_presence"] == {
+        "candidate": 202,
+        "not_candidate": 64,
     }
+    assert corpus.counts()["ownership"]["user"] == 2
+    assert corpus.counts()["ownership"]["protocol"] == 3
+    assert corpus.counts()["feature"]["concatenation"] == 2
+
+    samples = {sample.sample_id: sample for sample in corpus.samples}
+    assert "\n" in samples["zed-2551721-0260"].anchor
+    assert samples["zed-2551721-0255"].text_slot == "arg[3][0]"
+    assert samples["zed-2551721-0256"].text_slot == "arg[3][1]"
+    assert samples["zed-2551721-0257"].text_slot == "arg[3][2]"
 
 
-def test_loader_rejects_unknown_sample_fields(tmp_path: Path) -> None:
-    corpus_dir = _write_corpus(
-        tmp_path,
-        [_valid_sample() | {"unexpected": True}],
-    )
+def test_schema_matches_runtime_contract() -> None:
+    validate_schema_contract(SCHEMA_PATH)
 
-    with pytest.raises(GoldenCorpusError, match=r"unknown=\['unexpected'\]"):
+
+def test_schema_drift_is_rejected(tmp_path: Path) -> None:
+    schema: dict[str, object] = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+    required = schema["required"]
+    assert isinstance(required, list)
+    required.remove("review_state")
+    drifted_schema = tmp_path / "schema.json"
+    drifted_schema.write_text(json.dumps(schema), encoding="utf-8")
+
+    with pytest.raises(GoldenCorpusError, match="required fields drifted"):
+        validate_schema_contract(drifted_schema)
+
+
+def test_loader_rejects_invalid_presence_disposition_pair(tmp_path: Path) -> None:
+    sample = _valid_sample()
+    sample["expected_presence"] = "candidate"
+    sample["expected_disposition"] = "excluded"
+    corpus_dir = _write_corpus(tmp_path, sample)
+
+    with pytest.raises(GoldenCorpusError, match="candidate must be confirmed"):
         load_corpus(corpus_dir)
 
 
-def test_loader_rejects_sample_content_not_recorded_by_manifest(tmp_path: Path) -> None:
-    corpus_dir = _write_corpus(tmp_path, [_valid_sample()])
-    sample_path = corpus_dir / "samples.jsonl"
-    sample_path.write_text(
-        sample_path.read_text(encoding="utf-8") + "\n", encoding="utf-8"
-    )
+def test_loader_rejects_schema_version_1(tmp_path: Path) -> None:
+    corpus_dir = _write_corpus(tmp_path, _valid_sample())
+    manifest_path = corpus_dir / "manifest.json"
+    manifest: dict[str, object] = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["schema_version"] = 1
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
 
-    with pytest.raises(GoldenCorpusError, match="SHA-256 mismatch"):
+    with pytest.raises(GoldenCorpusError, match="unsupported schema_version 1"):
         load_corpus(corpus_dir)
 
 
-def test_checkout_validation_checks_commit_and_source_anchor(tmp_path: Path) -> None:
+def test_checkout_validates_relevant_file_hash_and_exact_span(
+    tmp_path: Path,
+) -> None:
     zed_root = tmp_path / "zed"
     source_path = zed_root / "crates/demo/src/lib.rs"
     source_path.parent.mkdir(parents=True)
-    source_path.write_text('fn render() { Label::new("Delete"); }\n', encoding="utf-8")
+    source_bytes = 'fn render() { Label::new("删除"); }\n'.encode()
+    source_path.write_bytes(source_bytes)
     _run_git(zed_root, "init")
     _run_git(zed_root, "add", "crates/demo/src/lib.rs")
     _run_git(
@@ -68,55 +101,69 @@ def test_checkout_validation_checks_commit_and_source_anchor(tmp_path: Path) -> 
         "fixture",
     )
     commit = _run_git(zed_root, "rev-parse", "HEAD").stdout.strip()
+    anchor = '"删除"'
+    start_byte = source_bytes.index(anchor.encode())
     sample = _valid_sample()
     sample["id"] = f"zed-{commit[:7]}-0001"
-    corpus_dir = _write_corpus(tmp_path / "data", [sample], commit=commit)
+    sample["anchor"] = anchor
+    sample["source_span"] = {
+        "start_byte": start_byte,
+        "end_byte": start_byte + len(anchor.encode()),
+    }
+    corpus_dir = _write_corpus(
+        tmp_path / "data",
+        sample,
+        commit=commit,
+        source_sha256=hashlib.sha256(source_bytes).hexdigest(),
+    )
 
     validate_checkout(load_corpus(corpus_dir), zed_root)
 
-    source_path.write_text('fn render() { Label::new("Keep"); }\n', encoding="utf-8")
-    with pytest.raises(GoldenCorpusError, match=r"anchor .* not found"):
+    source_path.write_bytes(source_bytes.replace("删除".encode(), "保留".encode()))
+    with pytest.raises(GoldenCorpusError, match="source SHA-256 mismatch"):
         validate_checkout(load_corpus(corpus_dir), zed_root)
 
 
 def _valid_sample() -> dict[str, object]:
     return {
-        "id": "zed-2551721-0001",
+        "id": "zed-aaaaaaa-0001",
         "path": "crates/demo/src/lib.rs",
-        "line": 1,
+        "source_span": {"start_byte": 25, "end_byte": 33},
         "anchor": '"Delete"',
         "scope": "production",
-        "sink_symbol": "ui::Label::new[0]",
+        "subject_kind": "sink_slot",
+        "sink_symbol": "ui::Label::new",
+        "text_slot": "arg[0]",
         "sink_kind": "visible_text",
         "features": ["direct_literal", "builder_argument"],
         "ownership": "product",
-        "decision": "confirmed",
+        "expected_presence": "candidate",
+        "expected_disposition": "confirmed",
+        "review_state": "single_review",
         "rationale": "fixture",
     }
 
 
 def _write_corpus(
     parent: Path,
-    samples: list[dict[str, object]],
+    sample: dict[str, object],
     *,
     commit: str = "a" * 40,
+    source_sha256: str = "b" * 64,
 ) -> Path:
     corpus_dir = parent / "corpus"
     corpus_dir.mkdir(parents=True)
     sample_bytes = (
-        "\n".join(
-            json.dumps(sample, ensure_ascii=False, separators=(",", ":"))
-            for sample in samples
-        )
-        + "\n"
+        json.dumps(sample, ensure_ascii=False, separators=(",", ":")) + "\n"
     ).encode()
     (corpus_dir / "samples.jsonl").write_bytes(sample_bytes)
     manifest = {
-        "schema_version": 1,
+        "schema_version": 2,
         "zed_commit": commit,
         "sample_file": "samples.jsonl",
-        "sample_count": len(samples),
+        "sample_count": 1,
         "sample_sha256": hashlib.sha256(sample_bytes).hexdigest(),
+        "source_files_sha256": {"crates/demo/src/lib.rs": source_sha256},
         "minimum_counts": {},
     }
     (corpus_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")

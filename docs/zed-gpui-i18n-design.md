@@ -645,15 +645,17 @@ zed-i18n check
 - Toast、Prompt、ARIA；
 - 测试和 component preview。
 
-当前 v1 语料固定为阶段 0 的可审计快照，不静默修改字段含义。
+阶段 0 最初建立了 250 条参考样本；阶段 0.5 已将其一次性转换到唯一支持的 corpus v2，旧格式不再保留或读取。
 
-### 阶段 0.5：评估协议与风险样本校准
+### 阶段 0.5：评估协议与风险样本校准（已完成）
 
-- 建立新的 corpus schema version 或显式迁移，表达 subject kind、精确 source span、text slot、期望发现状态、期望处置和 review state；
+- 直接切换到唯一的 corpus schema v2，表达 subject kind、精确 source span、text slot、期望发现状态、期望处置和 review state；
 - 定义 scan result 与 sink/origin/provenance 的精确匹配算法；
 - 固定 auto-confirm precision、candidate recall、unsafe promotion、exclusion leakage 和 unmatched 的计算方式；
 - 补充 `.child()` receiver、Prompt 多槽位、拼接/`push_str`、多行 raw string、跨函数 helper、内嵌 `#[cfg(test)]`、用户/协议内容和错误链样本；
 - 加入 schema 与运行时模型漂移检查，并要求评估输入是相关路径干净或有内容摘要的精确 checkout。
+
+当前唯一的 v2 corpus 包含 266 条样本，其中 16 条用于校准高风险结构。v2 使用文件级 UTF-8 byte span 和相关 Rust 文件 SHA-256；评估器要求 sink slot 使用 primary span，expression origin 使用结构化 provenance range，并分别报告 unmatched sample、未配对 occurrence 和重复匹配。v1 资产和兼容代码已按 [ADR 0004](decisions/0004-direct-v2-cutover.md) 删除。该结果只建立阶段 1 的评估地基，不代表扫描器已经实现。
 
 ### 阶段 1：只读扫描器
 

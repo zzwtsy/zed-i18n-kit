@@ -42,6 +42,15 @@ uv run ty check
 uv run pytest -q tests/test_check_script.py
 ```
 
+阶段 0.5 corpus 命令：
+
+```bash
+# 校验唯一的 v2 corpus、固定 commit、相关源码摘要和 byte span
+uv run python scripts/check_golden_corpus.py --zed local/zed
+```
+
+`corpus/zed-ui-text/v2/samples.jsonl` 是人工审核的唯一语料事实来源，manifest 固定其 SHA-256、覆盖配额和相关 Rust 文件摘要。修改样本或 Zed commit 时必须在同一工作项中更新 manifest，并通过 checkout 校验；项目不读取或迁移 v1。
+
 需要自动格式化时显式运行：
 
 ```bash

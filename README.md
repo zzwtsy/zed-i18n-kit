@@ -6,9 +6,9 @@
 
 ## 当前状态
 
-项目处于扫描器实施前的评估协议校准阶段。目前已经完成架构、上游调研，以及固定 Zed commit 的 250 条阶段 0 UI 文本参考语料；CLI 仍是占位实现，尚不能扫描或改写 Zed。
+项目已经完成扫描器实施前的阶段 0.5 评估协议校准：当前唯一支持的 corpus schema 是 v2，共 266 条样本，并提供 UTF-8 byte span、文本槽位、源码摘要、exact span/provenance 匹配和固定指标计算。旧 v1 格式已删除，不提供兼容读取或迁移入口。CLI 仍是占位实现，尚不能扫描或改写 Zed。
 
-当前下一步是阶段 0.5：固定扫描结果与参考语料的匹配和评分协议，补充高风险样本，并把复杂 API 建模为多个文本槽位。随后第一个产品里程碑是对指定 Zed crate 进行只读扫描，输出可解释、可审核的 `scan-result`，不生成目录也不修改源码。
+当前下一步是阶段 1：对指定 Zed crate 实施只读扫描器，输出可解释、可审核的 `scan-result`，并通过阶段 0.5 的 corpus 回归门禁；该阶段不生成翻译目录，也不修改源码。
 
 ## 核心边界
 
@@ -24,6 +24,7 @@
 ```bash
 uv sync --locked --all-groups
 uv run python scripts/check.py
+uv run python scripts/check_golden_corpus.py --zed local/zed
 ```
 
 聚焦命令和环境说明见[开发指南](docs/development.md)。
@@ -39,6 +40,7 @@ uv run python scripts/check.py
 - [Zed 上游国际化调研](docs/research/zed-upstream-i18n.md)
 - [阶段 0 金标语料调研](docs/research/zed-phase-0-golden-corpus.md)
 - [扫描器评估契约 ADR](docs/decisions/0003-scanner-evaluation-contract.md)
+- [直接切换 v2 ADR](docs/decisions/0004-direct-v2-cutover.md)
 - [AI 工程化调研](docs/research/ai-engineering-governance.md)
 
 ## 目录方向
