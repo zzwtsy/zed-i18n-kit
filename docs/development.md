@@ -12,7 +12,7 @@
 uv sync --locked --all-groups
 ```
 
-运行只读阶段 1A CLI：
+运行只读 scan/evaluate CLI：
 
 ```bash
 uv run zed-i18n-kit corpus-check --zed local/zed
@@ -24,7 +24,7 @@ uv run zed-i18n-kit evaluate \
   --output /tmp/zed-evaluation.json
 ```
 
-`scan` 只读取输入 checkout；`evaluate` 会重新核对 commit 和扫描范围内每个文件的 SHA-256。评估报告标记为 `prototype-observational-v1`，其中 `observational_metrics` 与 `independently_reviewed_metrics` 明确分离，不能直接作为阶段 1C 自动确认门禁。
+`scan` 默认发现 `crates/*/src/**/*.rs` 下的生产 Rust 文件，排除测试、examples、benches、fixtures、component preview 和生成路径，并且只读取输入 checkout。扫描器使用作用域化 `use`/alias 候选解析和 typed builtin rules；显式唯一解析可以自动分类，条件导入、通配符、父模块重导出或未知 receiver 保守进入审核，普通对象的同名 `.child()` 不会作为 GPUI sink。`evaluate` 会重新核对 commit 和扫描范围内每个文件的 SHA-256；corpus 未覆盖的 workspace occurrence 进入 unlabeled 审计，不会伪装成金标错误。评估报告标记为 `prototype-observational-v1`，其中 `observational_metrics` 与 `independently_reviewed_metrics` 明确分离，不能直接作为阶段 1C 自动确认门禁。
 
 ## 2. 统一质量门禁
 

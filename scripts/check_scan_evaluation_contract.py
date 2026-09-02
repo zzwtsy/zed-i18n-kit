@@ -21,6 +21,7 @@ from zed_i18n_kit.golden import (
     validate_schema_contract,
 )
 from zed_i18n_kit.rust_cst import RustCstError
+from zed_i18n_kit.scan_profiles import PROTOTYPE_SCAN_PROFILE
 from zed_i18n_kit.scan_result import (
     ScanResultError,
     parse_scan_result_json,
@@ -57,8 +58,8 @@ def main() -> int:
         validate_scan_result_schema(schema_resource(SCAN_RESULT_SCHEMA_NAME))
         validate_checkout(corpus, args.zed)
         calibration_results = validate_cst_calibration(corpus, args.zed)
-        initial_scan_result = scan_sources(args.zed)
-        repeated_scan_result = scan_sources(args.zed)
+        initial_scan_result = scan_sources(args.zed, profile=PROTOTYPE_SCAN_PROFILE)
+        repeated_scan_result = scan_sources(args.zed, profile=PROTOTYPE_SCAN_PROFILE)
         serialized_scan_result = serialize_scan_result(initial_scan_result)
         if serialized_scan_result != serialize_scan_result(repeated_scan_result):
             raise ScanEvaluationContractError(

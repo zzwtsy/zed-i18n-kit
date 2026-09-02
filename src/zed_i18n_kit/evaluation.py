@@ -218,9 +218,7 @@ def _validate_snapshot_identity(corpus: GoldenCorpus, scan_result: ScanResult) -
     for snapshot in metadata.source_files:
         expected_hash = corpus_hashes.get(snapshot.path)
         if expected_hash is None:
-            raise EvaluationError(
-                f"scan scope path is not covered by corpus snapshot: {snapshot.path}"
-            )
+            continue
         if snapshot.sha256 != expected_hash:
             raise EvaluationError(
                 f"{snapshot.path}: scan-result source SHA-256 differs from corpus: "

@@ -54,9 +54,9 @@ UI 文本候选 IR
 
 ### 3.1 当前项目状态
 
-`zed-i18n-kit` 当前已完成阶段 0、阶段 0.5 和阶段 1A：针对固定 Zed commit 建立了唯一的 corpus v2，共 266 条版本化 UI 文本参考样本；Tree-sitter Rust 原型使用 16 条风险样本校准 CST 与 canonical span，并建立严格、确定性的 `scan-result-v1`、snapshot 校验、评估报告和只读 CLI。Persistent inventory、完整扫描规则、运行时和 Overlay 尚未实现。`local/zed` 是一个独立且完整的 Zed Rust workspace，并通过当前仓库的 `.gitignore` 排除。
+`zed-i18n-kit` 当前已完成阶段 0、阶段 0.5、阶段 1A 和阶段 1B：针对固定 Zed commit 建立了唯一的 corpus v2，共 266 条版本化 UI 文本参考样本；Tree-sitter Rust 使用 16 条风险样本校准 CST 与 canonical span，并建立严格、确定性的 `scan-result-v1`、snapshot 校验、评估报告和只读 CLI。Persistent inventory、规则冻结、运行时和 Overlay 尚未实现。`local/zed` 是一个独立且完整的 Zed Rust workspace，并通过当前仓库的 `.gitignore` 排除。
 
-阶段 1A 已确认 occurrence、sink、所有权和源码作用域必须共同参与判断，并闭合 canonical CST span、nullable origin constraint、corpus 外发现和 auto-confirm coverage 的协议语义。当前 10 文件原型仍有 21 个同路径 candidate 样本未覆盖、44 个 unlabeled occurrence 待审计，且 266 条样本均未独立复核；这些数字是阶段 1B/1C 的工作输入，不是质量门禁通过声明。
+阶段 1A 已确认 occurrence、sink、所有权和源码作用域必须共同参与判断，并闭合 canonical CST span、nullable origin constraint、corpus 外发现和 auto-confirm coverage 的协议语义。阶段 1B 默认 discovery 覆盖 `crates/*/src/**/*.rs` 的生产文件，并增加作用域化 import/alias 候选解析、9 条 typed builtin rules、receiver 证据和函数内保守 provenance；固定 10 文件 profile 继续承担协议回归。通配符、父模块重导出、未知 receiver 和复杂传播不会伪装成精确语义。266 条样本均未独立复核，当前结果只是阶段 1C 的工作输入，不是质量门禁通过声明。
 
 这意味着系统应划分为持久资产、外部输入和派生工作区三个边界：
 
@@ -690,6 +690,8 @@ Tree-sitter 后端及已知 grammar 限制记录在 [ADR 0006](decisions/0006-tr
 - 实现函数内反向追踪和保守降级；
 - 使用阶段 1A 协议输出确定性、版本化的 scan-result；
 - 不生成目录，不改写源码。
+
+阶段 1B 已完成：默认 CLI 发现生产 `src/**/*.rs`，执行路径排除和越界符号链接保护；作用域化 `use`、alias、本地声明和 `cfg(test)` 参与候选符号解析；首批 typed builtin rules 覆盖 GPUI component、Prompt、Notification、ARIA 和 receiver 可证明的 `.child()`；函数内 provenance 跟踪简单绑定、分支、重赋值、`format!` 和 `push_str`。阶段 1A fixed profile 保持独立。Tree-sitter token tree、跨文件重导出和完整 Rust 类型推导仍保守降级或成为显式覆盖缺口，阶段 1C 必须先独立审核才能冻结自动确认规则。
 
 ### 阶段 1C：规则冻结与独立审计
 

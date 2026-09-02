@@ -191,6 +191,24 @@ def test_scope_limits_samples_and_metric_denominators() -> None:
     assert report.unmatched_sample_ids == (in_scope.sample_id,)
 
 
+def test_scan_scope_may_include_sources_outside_corpus_manifest() -> None:
+    corpus = _corpus((_sample("0001", SourceSpan(0, 4), Decision.CONFIRMED),))
+    base_result = _scan_result(())
+    workspace_metadata = replace(
+        base_result.metadata,
+        scan_scope=(PATH, OUTSIDE_PATH),
+        source_files=(
+            SourceFileSnapshot(PATH, SOURCE_HASH),
+            SourceFileSnapshot(OUTSIDE_PATH, "e" * 64),
+        ),
+    )
+
+    report = evaluate_scan_result(corpus, ScanResult(1, workspace_metadata, ()))
+
+    assert report.evaluated_sample_count == 1
+    assert report.unmatched_sample_ids == (corpus.samples[0].sample_id,)
+
+
 def test_single_review_has_undefined_coverage_and_no_reviewed_metrics() -> None:
     sample = _sample("0001", SourceSpan(0, 4), Decision.CONFIRMED)
     occurrence = _occurrence("one", SourceSpan(0, 4), Decision.REVIEW_REQUIRED)

@@ -97,6 +97,149 @@ def test_cst_calibration_contract_has_exactly_sixteen_cases() -> None:
     )
 
 
+def test_default_scanner_uses_workspace_discovery(tmp_path: Path) -> None:
+    zed_root = tmp_path / "zed"
+    second_path = PurePosixPath("crates/second/src/view.rs")
+    excluded_path = PurePosixPath("crates/demo/src/tests/fixture.rs")
+    sources = {
+        SOURCE_PATH: 'use ui::Label; fn first() { Label::new("first"); }\n',
+        second_path: 'use ui::Label; fn second() { Label::new("second"); }\n',
+        excluded_path: ('use ui::Label; fn fixture() { Label::new("excluded"); }\n'),
+    }
+    for path, source in sources.items():
+        source_path = zed_root / path
+        source_path.parent.mkdir(parents=True, exist_ok=True)
+        source_path.write_text(source, encoding="utf-8")
+    _initialize_git_repository(zed_root, source_paths=tuple(sources))
+
+    result = scan_sources(zed_root)
+
+    assert result.metadata.scan_scope == (SOURCE_PATH, second_path)
+    assert len(result.occurrences) == 2
+
+
+def test_workspace_scanner_uses_typed_symbols_slots_and_receivers(
+    tmp_path: Path,
+) -> None:
+    zed_root = tmp_path / "zed"
+    source_path = zed_root / SOURCE_PATH
+    source_path.parent.mkdir(parents=True)
+    source = b"""
+use gpui::{Window, div};
+use notifications::status_toast::StatusToast;
+use project::LanguageServerPromptRequest;
+use ui::{Button, Label, Tooltip, h_flex};
+use workspace::Toast as WorkspaceToast;
+use impostor::Label as FakeLabel;
+
+fn render(window: &mut Window, cx: &mut App) {
+    Label::new("Label");
+    Button::new("button-id", "Button");
+    Tooltip::text(dynamic_tooltip);
+    h_flex().child("Child");
+    h_flex().child(dynamic_element);
+    business_object.child("Not UI");
+    div().aria_label("Accessible");
+    unknown_widget.aria_label(dynamic_label);
+    window.prompt(
+        Level::Info,
+        "Question?",
+        Some(&detail),
+        &["Yes"],
+        cx,
+    );
+    WorkspaceToast::new(id, "Saved");
+    StatusToast::new("Finished", cx, |this, _| this);
+    LanguageServerPromptRequest::new(level, protocol_message);
+    FakeLabel::new("Wrong symbol");
+}
+"""
+    source_path.write_bytes(source)
+    _initialize_git_repository(zed_root)
+
+    result = scan_sources(zed_root)
+    by_primary = {
+        source[item.primary_span.start_byte : item.primary_span.end_byte]: item
+        for item in result.occurrences
+    }
+
+    assert len(result.occurrences) == 13
+    assert by_primary[b'"Label"'].sink_symbol == "ui::Label::new"
+    assert by_primary[b'"button-id"'].disposition is Decision.EXCLUDED
+    assert by_primary[b'"Button"'].text_slot == "arg[1]"
+    assert by_primary[b"dynamic_tooltip"].disposition is Decision.REVIEW_REQUIRED
+    assert by_primary[b'"Child"'].sink_symbol == "gpui::ParentElement::child"
+    assert b"dynamic_element" not in by_primary
+    assert b'"Not UI"' not in by_primary
+    assert by_primary[b'"Accessible"'].disposition is Decision.CONFIRMED
+    assert by_primary[b"dynamic_label"].disposition is Decision.REVIEW_REQUIRED
+    assert by_primary[b'"Question?"'].text_slot == "arg[1]"
+    assert by_primary[b"&detail"].text_slot == "arg[2].Some"
+    assert by_primary[b'"Yes"'].text_slot == "arg[3][0]"
+    assert by_primary[b'"Saved"'].sink_symbol == "workspace::Toast::new"
+    assert by_primary[b'"Finished"'].sink_symbol == (
+        "notifications::status_toast::StatusToast::new"
+    )
+    assert by_primary[b"protocol_message"].sink_symbol == (
+        "project::LanguageServerPromptRequest::new"
+    )
+    assert b'"Wrong symbol"' not in by_primary
+    assert any(
+        probe.probe_id == "cfg-aware-import-resolution"
+        and probe.status.value == "passed"
+        for probe in result.metadata.capability_probes
+    )
+    assert any(
+        probe.probe_id == "typed-builtin-rules" and probe.status.value == "passed"
+        for probe in result.metadata.capability_probes
+    )
+    assert all(item.evidence[0].rule_id.endswith("-v1") for item in result.occurrences)
+
+
+def test_workspace_scanner_downgrades_wildcard_symbols_and_traces_mutations(
+    tmp_path: Path,
+) -> None:
+    zed_root = tmp_path / "zed"
+    source_path = zed_root / SOURCE_PATH
+    source_path.parent.mkdir(parents=True)
+    source = b"""
+use ui::prelude::*;
+
+fn render(flag: bool) {
+    let mut message = if flag { "Enabled" } else { "Disabled" };
+    message.push_str("!");
+    message = format!("State: {message}");
+    Label::new(message);
+    Button::new("candidate-id", "Candidate label");
+}
+"""
+    source_path.write_bytes(source)
+    _initialize_git_repository(zed_root)
+
+    result = scan_sources(zed_root)
+
+    assert len(result.occurrences) == 2
+    occurrence = next(
+        item for item in result.occurrences if item.sink_symbol == "ui::Label::new"
+    )
+    assert occurrence.disposition is Decision.REVIEW_REQUIRED
+    assert "wildcard import candidate" in occurrence.evidence[0].reason
+    provenance_text = {
+        source[item.source_span.start_byte : item.source_span.end_byte]
+        for item in occurrence.provenance
+    }
+    assert b'if flag { "Enabled" } else { "Disabled" }' in provenance_text
+    assert b'"Enabled"' in provenance_text
+    assert b'"Disabled"' in provenance_text
+    assert b'"!"' in provenance_text
+    assert b'format!("State: {message}")' in provenance_text
+    assert all(
+        source[item.primary_span.start_byte : item.primary_span.end_byte]
+        != b'"candidate-id"'
+        for item in result.occurrences
+    )
+
+
 def test_snapshot_rejects_out_of_bounds_primary_span(tmp_path: Path) -> None:
     zed_root = tmp_path / "zed"
     source_path = zed_root / SOURCE_PATH
@@ -147,10 +290,12 @@ def test_scanner_skips_calls_with_parse_error_descendants(tmp_path: Path) -> Non
     )
 
 
-def _initialize_git_repository(repository: Path) -> None:
+def _initialize_git_repository(
+    repository: Path, *, source_paths: tuple[PurePosixPath, ...] = (SOURCE_PATH,)
+) -> None:
     commands = (
         ("init",),
-        ("add", SOURCE_PATH.as_posix()),
+        ("add", *(path.as_posix() for path in source_paths)),
         (
             "-c",
             "user.name=Scanner Test",

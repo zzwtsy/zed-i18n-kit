@@ -6,9 +6,9 @@
 
 ## 当前状态
 
-项目已经完成阶段 1A 扫描评估协议闭环：当前唯一支持的 corpus schema 是 v2，共 266 条样本；Tree-sitter Rust 原型使用其中 16 条高风险样本校准 canonical span，并提供持久 `scan-result-v1`、源码快照校验、exact span/provenance 评估和只读 CLI。旧 v1 corpus 格式已删除，不提供兼容读取或迁移入口。
+项目已经完成阶段 1A 扫描评估协议闭环和阶段 1B 只读扫描器：当前唯一支持的 corpus schema 是 v2，共 266 条样本；Tree-sitter Rust 使用其中 16 条高风险样本校准 canonical span，并提供持久 `scan-result-v1`、源码快照校验、exact span/provenance 评估和只读 CLI。旧 v1 corpus 格式已删除，不提供兼容读取或迁移入口。
 
-当前原型只扫描固定的 10 个 Zed 文件和 4 类内置 sink 语法，尚未实现 workspace discovery、通用符号/类型解析或完整规则覆盖。现有 266 条样本全部是 `single_review`，因此评估结果是 observational，auto-confirm coverage 分母为零，不能宣称达到自动确认门禁。下一步阶段 1B 才扩展只读扫描器；当前仍不生成翻译目录，也不修改源码。
+默认 `scan` 已按 `crates/*/src/**/*.rs` 发现生产 Rust 文件，并排除测试、examples、benches、fixtures、component preview 和生成路径；固定 10 文件 profile 仅保留为阶段 1A 协议回归。首批 9 条 typed builtin rules 覆盖 GPUI component、Prompt、Notification、ARIA 和受 receiver 约束的 `.child()`，显式 import/alias 可以精确解析，通配符和父模块重导出保守进入 `review_required`。现有 266 条样本全部是 `single_review`，因此评估结果仍是 observational，不能宣称达到自动确认门禁；阶段 1C 才执行独立审核和规则冻结。工具仍不生成翻译目录，也不修改源码。
 
 ## 核心边界
 

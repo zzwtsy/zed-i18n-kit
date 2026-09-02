@@ -48,7 +48,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    scan_parser = subparsers.add_parser("scan", help="run the typed prototype scanner")
+    scan_parser = subparsers.add_parser(
+        "scan", help="scan production Rust sources without modifying the checkout"
+    )
     scan_parser.add_argument("--zed", type=Path, default=DEFAULT_ZED_ROOT)
     scan_parser.add_argument("--output", type=Path, required=True)
 
