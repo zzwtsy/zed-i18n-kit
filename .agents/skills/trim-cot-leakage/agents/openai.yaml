@@ -1,0 +1,6 @@
+interface:
+  display_name: "推理过程泄漏清理"
+  short_description: "审计并清理持久文本中的作者会话视角、评审叙事和无主计划残留"
+  default_prompt: "使用 $trim-cot-leakage 审计指定范围内的持久文本，并报告或修复推理过程泄漏。"
+policy:
+  allow_implicit_invocation: true
