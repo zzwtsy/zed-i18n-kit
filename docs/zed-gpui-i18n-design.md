@@ -701,6 +701,8 @@ Tree-sitter 后端及已知 grammar 限制记录在 [ADR 0006](decisions/0006-tr
 - 固定首批允许自动确认的规则、tested commits 和 capability probes；
 - 量化 Tree-sitter 在 receiver、宏、helper 和跨函数语义上的缺口，再决定是否评估 rust-analyzer sidecar。
 
+阶段 1C 的审核基础设施已落地：corpus blind bundle 与 unlabeled audit bundle 都不暴露扫描预测，外部结果使用严格版本化 schema 并绑定 commit/corpus/config，`zed-builtin-v1` policy 固定 9 条规则和 capability probes。冻结报告重新验证完整 scan snapshot，并同时检查最小样本、分母、关键 strata、precision/coverage/recall 和安全错误类别。当前没有真实独立审核结果，baseline 必须输出 `reviewing`，这表示基础设施可用但规则尚未冻结。
+
 ### 阶段 2：持久 inventory 与版本对账
 
 - 保存 `zed_commit`、工具、规则和配置版本；

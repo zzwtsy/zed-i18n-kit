@@ -1,0 +1,89 @@
+{
+  "schema_version": 1,
+  "review_set_id": "phase-1c-baseline",
+  "zed_commit": "2551721adb5b5187bc27cfae0fbe47f0ed4c5397",
+  "corpus_sample_sha256": "01eccfad9d4c38ff08856bca151e9ae9b2a6c99a505ef9d0c6f731960727e81f",
+  "tool_version": "0.1.0",
+  "rule_pack_version": "zed-builtin-v1",
+  "config_hash": "4d9415137dc2b6cbfea88798dd87a593a07be7e9be887ac7c0e015df96cc749b",
+  "rule_ids": [
+    "gpui-interactive-aria-label-v1",
+    "gpui-parent-child-literal-v1",
+    "gpui-window-prompt-v1",
+    "notifications-status-toast-new-v1",
+    "project-language-server-prompt-v1",
+    "ui-button-new-v1",
+    "ui-label-new-v1",
+    "ui-tooltip-text-v1",
+    "workspace-toast-new-v1"
+  ],
+  "required_passed_probes": [
+    "tree-sitter-rust-binding",
+    "cfg-aware-import-resolution",
+    "typed-builtin-rules"
+  ],
+  "allowed_failed_probes": ["prototype-error-free-parse"],
+  "minimum_reviewed_samples": 200,
+  "strata": [
+    { "dimension": "expected_disposition", "value": "confirmed", "minimum": 100 },
+    { "dimension": "expected_disposition", "value": "review_required", "minimum": 40 },
+    { "dimension": "expected_disposition", "value": "excluded", "minimum": 30 },
+    { "dimension": "ownership", "value": "product", "minimum": 100 },
+    { "dimension": "ownership", "value": "mixed", "minimum": 10 },
+    { "dimension": "ownership", "value": "developer", "minimum": 10 },
+    { "dimension": "ownership", "value": "unknown", "minimum": 10 },
+    { "dimension": "ownership", "value": "identity", "minimum": 5 },
+    { "dimension": "ownership", "value": "protocol", "minimum": 2 },
+    { "dimension": "ownership", "value": "user", "minimum": 2 },
+    { "dimension": "subject_kind", "value": "sink_slot", "minimum": 120 },
+    { "dimension": "subject_kind", "value": "expression_origin", "minimum": 60 },
+    { "dimension": "subject_kind", "value": "scope_exclusion", "minimum": 5 },
+    { "dimension": "feature", "value": "dynamic_external", "minimum": 15 },
+    { "dimension": "feature", "value": "format_template", "minimum": 15 },
+    { "dimension": "feature", "value": "local_variable", "minimum": 30 },
+    { "dimension": "feature", "value": "accessibility", "minimum": 15 },
+    { "dimension": "feature", "value": "prompt", "minimum": 10 },
+    { "dimension": "feature", "value": "toast", "minimum": 8 },
+    { "dimension": "feature", "value": "element_id", "minimum": 8 },
+    { "dimension": "feature", "value": "log_or_diagnostic", "minimum": 10 },
+    { "dimension": "rule_id", "value": "gpui-interactive-aria-label-v1", "minimum": 10 },
+    { "dimension": "rule_id", "value": "gpui-parent-child-literal-v1", "minimum": 2 },
+    { "dimension": "rule_id", "value": "gpui-window-prompt-v1", "minimum": 8 },
+    { "dimension": "rule_id", "value": "notifications-status-toast-new-v1", "minimum": 1 },
+    { "dimension": "rule_id", "value": "project-language-server-prompt-v1", "minimum": 1 },
+    { "dimension": "rule_id", "value": "ui-button-new-v1", "minimum": 30 },
+    { "dimension": "rule_id", "value": "ui-label-new-v1", "minimum": 40 },
+    { "dimension": "rule_id", "value": "ui-tooltip-text-v1", "minimum": 20 },
+    { "dimension": "rule_id", "value": "workspace-toast-new-v1", "minimum": 1 }
+  ],
+  "metrics": {
+    "auto_confirm_precision": {
+      "minimum_denominator": 100,
+      "minimum": 0.99,
+      "maximum": null
+    },
+    "auto_confirm_coverage": {
+      "minimum_denominator": 100,
+      "minimum": 0.5,
+      "maximum": null
+    },
+    "candidate_recall": {
+      "minimum_denominator": 150,
+      "minimum": 0.95,
+      "maximum": null
+    },
+    "unsafe_promotion_rate": {
+      "minimum_denominator": 40,
+      "minimum": null,
+      "maximum": 0.0
+    },
+    "exclusion_leakage": {
+      "minimum_denominator": 30,
+      "minimum": null,
+      "maximum": 0.01
+    }
+  },
+  "maximum_unmatched_samples": 0,
+  "maximum_ambiguous_samples": 0,
+  "maximum_disputed_samples": 0
+}

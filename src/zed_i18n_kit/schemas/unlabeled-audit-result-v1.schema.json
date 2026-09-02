@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zed-i18n-kit.invalid/schemas/unlabeled-audit-result-v1.schema.json",
+  "title": "zed-i18n-kit unlabeled occurrence audit result v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "audit_set_id",
+    "zed_commit",
+    "corpus_sample_sha256",
+    "scan_config_hash",
+    "reviewer_id",
+    "decisions"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "audit_set_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{2,63}$"
+    },
+    "zed_commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "corpus_sample_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "scan_config_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "reviewer_id": { "type": "string", "minLength": 1 },
+    "decisions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["occurrence_id", "classification", "rationale"],
+        "properties": {
+          "occurrence_id": { "type": "string", "minLength": 1 },
+          "classification": {
+            "enum": [
+              "legitimate_candidate",
+              "false_positive",
+              "corpus_gap",
+              "indeterminate"
+            ]
+          },
+          "rationale": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}

@@ -155,6 +155,9 @@ corpus 阈值是回归门禁，不得表述为完整 Zed workspace 的统计准�
 - 生产 Rust discovery 的包含、排除、越界符号链接和确定性回归；
 - 合成 Rust CST/typed scanner fixtures，包括作用域化 import/alias、`cfg(test)`、通配符降级、相似名称反例、receiver 与函数内 provenance；
 - 在固定 Zed checkout 可用时执行 `scripts/check_scan_evaluation_contract.py` 的 16 样本闭环。
+- blind review/audit bundle 的字段隐私、确定性、UTF-8 context 与身份绑定；
+- review/audit result 的未知字段、重复/未知 ID、非法状态、身份漂移和不完整结果负面控制；
+- rule freeze policy 的最小分母、分层、identity、capability、unsafe promotion 和零独立审核 fail-closed 控制。
 
 ### 扫描器阶段
 

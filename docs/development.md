@@ -26,6 +26,45 @@ uv run zed-i18n-kit evaluate \
 
 `scan` 默认发现 `crates/*/src/**/*.rs` 下的生产 Rust 文件，排除测试、examples、benches、fixtures、component preview 和生成路径，并且只读取输入 checkout。扫描器使用作用域化 `use`/alias 候选解析和 typed builtin rules；显式唯一解析可以自动分类，条件导入、通配符、父模块重导出或未知 receiver 保守进入审核，普通对象的同名 `.child()` 不会作为 GPUI sink。`evaluate` 会重新核对 commit 和扫描范围内每个文件的 SHA-256；corpus 未覆盖的 workspace occurrence 进入 unlabeled 审计，不会伪装成金标错误。评估报告标记为 `prototype-observational-v1`，其中 `observational_metrics` 与 `independently_reviewed_metrics` 明确分离，不能直接作为阶段 1C 自动确认门禁。
 
+阶段 1C 独立审核与冻结门禁：
+
+```bash
+# 导出不包含旧标签、rationale、review state 或 scanner prediction 的审核包
+uv run zed-i18n-kit review-export \
+  --corpus corpus/zed-ui-text/v2 \
+  --zed local/zed \
+  --review-set phase-1c-baseline \
+  --output /tmp/zed-review-bundle.json
+
+# 校验外部审核者按 review-result-v1 schema 提供的事实输入
+uv run zed-i18n-kit review-check \
+  --corpus corpus/zed-ui-text/v2 \
+  --review-set phase-1c-baseline \
+  --review-result /tmp/zed-review-result.json
+
+# 同时核对完整 scan snapshot、规则身份、capability、分层和指标门槛
+uv run zed-i18n-kit freeze-check \
+  --corpus corpus/zed-ui-text/v2 \
+  --scan-result /tmp/zed-scan.json \
+  --zed local/zed \
+  --review-result /tmp/zed-review-result.json
+
+# 从 corpus 外发现中优先抽取新路径，并按 rule/disposition/risk 轮询分层
+uv run zed-i18n-kit audit-export \
+  --corpus corpus/zed-ui-text/v2 \
+  --scan-result /tmp/zed-scan.json \
+  --zed local/zed \
+  --audit-set phase-1c-unlabeled-baseline \
+  --sample-size 100 \
+  --output /tmp/zed-unlabeled-audit-bundle.json
+
+uv run zed-i18n-kit audit-check \
+  --audit-bundle /tmp/zed-unlabeled-audit-bundle.json \
+  --audit-result /tmp/zed-unlabeled-audit-result.json
+```
+
+`review-check` 在 disputed 或 missing 时返回非零；`audit-check` 在审核不完整时返回非零。`freeze-check` 没有审核结果、分母/分层不足、identity 漂移、未允许的 capability failure、unmatched、ambiguous、disagreement 或指标不达标时均返回非零，并输出 `freeze_status=reviewing`。工具只校验 reviewer ID 非空，不能替代组织层面的独立性确认，也不会自动生成审核结论。
+
 ## 2. 统一质量门禁
 
 ```bash

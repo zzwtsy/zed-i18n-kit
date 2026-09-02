@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zed-i18n-kit.invalid/schemas/review-result-v1.schema.json",
+  "title": "zed-i18n-kit independent review result v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "review_set_id",
+    "zed_commit",
+    "corpus_sample_sha256",
+    "reviewer_id",
+    "decisions"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "review_set_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{2,63}$"
+    },
+    "zed_commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "corpus_sample_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "reviewer_id": { "type": "string", "minLength": 1 },
+    "decisions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sample_id",
+          "expected_presence",
+          "expected_disposition",
+          "ownership",
+          "rationale"
+        ],
+        "properties": {
+          "sample_id": {
+            "type": "string",
+            "pattern": "^zed-[0-9a-f]{7}-[0-9]{4}$"
+          },
+          "expected_presence": { "enum": ["candidate", "not_candidate"] },
+          "expected_disposition": {
+            "enum": ["confirmed", "review_required", "excluded"]
+          },
+          "ownership": {
+            "enum": [
+              "product",
+              "mixed",
+              "user",
+              "protocol",
+              "developer",
+              "identity",
+              "unknown"
+            ]
+          },
+          "rationale": { "type": "string", "minLength": 1 }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": { "expected_presence": { "const": "candidate" } },
+              "required": ["expected_presence"]
+            },
+            "then": {
+              "properties": {
+                "expected_disposition": {
+                  "enum": ["confirmed", "review_required"]
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "expected_disposition": { "const": "excluded" }
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

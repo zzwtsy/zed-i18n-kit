@@ -5,6 +5,10 @@ from importlib.resources.abc import Traversable
 from pathlib import Path
 
 GOLDEN_CORPUS_SCHEMA_NAME = "golden-corpus-sample-v2.schema.json"
+UNLABELED_AUDIT_BUNDLE_SCHEMA_NAME = "unlabeled-audit-bundle-v1.schema.json"
+UNLABELED_AUDIT_RESULT_SCHEMA_NAME = "unlabeled-audit-result-v1.schema.json"
+REVIEW_BUNDLE_SCHEMA_NAME = "review-bundle-v1.schema.json"
+REVIEW_RESULT_SCHEMA_NAME = "review-result-v1.schema.json"
 SCAN_RESULT_SCHEMA_NAME = "scan-result-v1.schema.json"
 
 type SchemaResource = Path | Traversable

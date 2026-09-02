@@ -6,9 +6,11 @@
 
 ## 当前状态
 
-项目已经完成阶段 1A 扫描评估协议闭环和阶段 1B 只读扫描器：当前唯一支持的 corpus schema 是 v2，共 266 条样本；Tree-sitter Rust 使用其中 16 条高风险样本校准 canonical span，并提供持久 `scan-result-v1`、源码快照校验、exact span/provenance 评估和只读 CLI。旧 v1 corpus 格式已删除，不提供兼容读取或迁移入口。
+项目已经完成阶段 1A 扫描评估协议闭环和阶段 1B 只读扫描器，并进入阶段 1C 独立审核：当前唯一支持的 corpus schema 是 v2，共 266 条样本；Tree-sitter Rust 使用其中 16 条高风险样本校准 canonical span，并提供持久 `scan-result-v1`、源码快照校验、exact span/provenance 评估和只读 CLI。旧 v1 corpus 格式已删除，不提供兼容读取或迁移入口。
 
-默认 `scan` 已按 `crates/*/src/**/*.rs` 发现生产 Rust 文件，并排除测试、examples、benches、fixtures、component preview 和生成路径；固定 10 文件 profile 仅保留为阶段 1A 协议回归。首批 9 条 typed builtin rules 覆盖 GPUI component、Prompt、Notification、ARIA 和受 receiver 约束的 `.child()`，显式 import/alias 可以精确解析，通配符和父模块重导出保守进入 `review_required`。现有 266 条样本全部是 `single_review`，因此评估结果仍是 observational，不能宣称达到自动确认门禁；阶段 1C 才执行独立审核和规则冻结。工具仍不生成翻译目录，也不修改源码。
+默认 `scan` 已按 `crates/*/src/**/*.rs` 发现生产 Rust 文件，并排除测试、examples、benches、fixtures、component preview 和生成路径；固定 10 文件 profile 仅保留为阶段 1A 协议回归。首批 9 条 typed builtin rules 覆盖 GPUI component、Prompt、Notification、ARIA 和受 receiver 约束的 `.child()`，显式 import/alias 可以精确解析，通配符和父模块重导出保守进入 `review_required`。
+
+阶段 1C 已提供不含旧标签或扫描预测的 blind review bundle、严格 review result、分层 unlabeled audit 和 fail-closed `freeze-check`。现有 266 条样本仍全部是 `single_review`，真实 baseline 状态为 `reviewing`，不得宣称规则已经冻结。工具仍不生成翻译目录，也不修改源码。
 
 ## 核心边界
 
@@ -44,13 +46,14 @@ uv run python scripts/check_scan_evaluation_contract.py --zed local/zed
 - [直接切换 v2 ADR](docs/decisions/0004-direct-v2-cutover.md)
 - [阶段 1 评估闭环优先 ADR](docs/decisions/0005-phase-1-evaluation-loop-first.md)
 - [Tree-sitter Rust CST 后端 ADR](docs/decisions/0006-tree-sitter-rust-cst-backend.md)
+- [阶段 1C 独立审核与规则冻结 ADR](docs/decisions/0007-phase-1c-independent-review-gate.md)
 - [AI 工程化调研](docs/research/ai-engineering-governance.md)
 
 ## 目录方向
 
 ```text
-src/zed_i18n_kit/   Python 分析工具及随 wheel 发布的 schema
-rules/              Zed/GPUI domain rule packs
+src/zed_i18n_kit/   Python 分析工具及随 wheel 发布的 schema/rule policy
+rules/              后续可独立分发的 Zed/GPUI domain rule packs
 schemas/            Inventory、trace 与迁移格式
 runtime-template/   注入派生工作区的最小 Rust runtime
 adapters/           针对 Zed commit 的接入规则

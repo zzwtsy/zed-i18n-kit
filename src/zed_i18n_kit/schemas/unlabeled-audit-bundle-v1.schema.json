@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zed-i18n-kit.invalid/schemas/unlabeled-audit-bundle-v1.schema.json",
+  "title": "zed-i18n-kit blind unlabeled occurrence audit bundle v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "audit_set_id",
+    "zed_commit",
+    "corpus_sample_sha256",
+    "scan_config_hash",
+    "rule_pack_version",
+    "sample_size_requested",
+    "occurrences"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "audit_set_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{2,63}$"
+    },
+    "zed_commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "corpus_sample_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "scan_config_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "rule_pack_version": { "type": "string", "minLength": 1 },
+    "sample_size_requested": { "type": "integer", "minimum": 1 },
+    "occurrences": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "occurrence_id",
+          "path",
+          "primary_span",
+          "context_span",
+          "source_context",
+          "syntax_kind"
+        ],
+        "properties": {
+          "occurrence_id": { "type": "string", "minLength": 1 },
+          "path": { "$ref": "#/$defs/sourcePath" },
+          "primary_span": { "$ref": "#/$defs/sourceSpan" },
+          "context_span": { "$ref": "#/$defs/sourceSpan" },
+          "source_context": { "type": "string", "minLength": 1 },
+          "syntax_kind": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "sourcePath": {
+      "type": "string",
+      "pattern": "^crates/(?:(?!\\.{1,2}(?:/|$))[^/]+/)*(?!\\.{1,2}(?:/|$))[^/]+\\.rs$"
+    },
+    "sourceSpan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start_byte", "end_byte"],
+      "properties": {
+        "start_byte": { "type": "integer", "minimum": 0 },
+        "end_byte": { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}

@@ -141,7 +141,7 @@ def evaluate_scan_result(
         matches = tuple(
             occurrence
             for occurrence in scan_result.occurrences
-            if _occurrence_matches_sample(occurrence, sample)
+            if occurrence_matches_sample(occurrence, sample)
         )
         labeled_occurrence_ids.update(
             occurrence.occurrence_id for occurrence in matches
@@ -226,9 +226,7 @@ def _validate_snapshot_identity(corpus: GoldenCorpus, scan_result: ScanResult) -
             )
 
 
-def _occurrence_matches_sample(
-    occurrence: ScanOccurrence, sample: GoldenSample
-) -> bool:
+def occurrence_matches_sample(occurrence: ScanOccurrence, sample: GoldenSample) -> bool:
     if sample.subject_kind is SubjectKind.SINK_SLOT:
         return (
             occurrence.path == sample.path
