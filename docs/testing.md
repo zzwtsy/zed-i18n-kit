@@ -40,7 +40,8 @@ git diff --check
 - Rust 字面量、宏、方法调用、`let`、`if` 和 `match` fixtures；
 - 不完整源码的错误恢复；
 - UTF-8 字符之前和之中的 byte range；
-- 注释、raw string、转义和多行输入；
+- 注释、raw string、转义、多行输入和同一行多个候选；
+- 内嵌 `#[cfg(test)]`、component preview 和生成边界的作用域识别；
 - 解析失败必须显式报告，不能返回空 inventory 冒充成功。
 
 ### 4.2 Domain rule pack
@@ -53,13 +54,30 @@ git diff --check
 - 受支持版本能力探测；
 - 命中规则和证据的稳定输出。
 
+一个 sink 存在多个文本槽位时，每个槽位分别测试。至少覆盖：
+
+- Button 的 identity 与 visible label；
+- Prompt 的 message、optional detail 和 answers 集合；
+- Toast message 与后续 action label；
+- value path 不匹配时只禁用受影响槽位，不误用相邻参数。
+
 金标集分别统计：
 
-- 自动确认 precision；
-- 总候选 recall；
-- excluded 与 review_required 的混淆情况。
+- auto-confirm precision：预测为 `confirmed` 的样本中，金标允许自动确认的比例；
+- candidate recall：应发现的样本中，被输出为 `confirmed` 或 `review_required` 的比例；
+- unsafe promotion rate：金标要求审核但被预测为 `confirmed` 的比例；
+- exclusion leakage：金标应排除但被输出为候选的比例；
+- unmatched count：无法按精确 source span 或 provenance 对齐的样本数量。
 
-指标必须固定样本版本和计算脚本，不能只报告经过挑选的成功案例。
+指标必须固定样本版本、Zed commit、扫描配置和计算脚本。corpus 阈值是回归门禁，不得表述为完整 Zed workspace 的统计准确率。规则冻结后，从未参与调优的新路径和高风险结构中抽样，独立审计误报与漏报；两类结果分别报告。
+
+评估输入必须满足以下要求：
+
+- 相关 Zed 路径工作树干净，或 scan snapshot 记录并验证文件内容摘要；
+- anchor 在声明范围内唯一，评估匹配使用精确 UTF-8 byte range；
+- expression origin 只能通过结构化 provenance 匹配，不能按英文文本模糊关联；
+- 重复匹配、span 失效和 provenance 缺失产生明确失败或 unmatched；
+- corpus schema 与 Python 运行时模型存在自动漂移检查。
 
 ### 4.3 Inventory 与持久 schema
 
@@ -68,6 +86,7 @@ git diff --check
 - 旧版本读取或明确拒绝策略；
 - Message ID 与 Occurrence 身份分离；
 - 序列化结果确定性和隐私字段检查。
+- 阶段 1 `scan-result` 不携带已冻结 Message ID 或跨版本审核状态；阶段 2 persistent inventory 才建立这些承诺。
 
 ### 4.4 Rewrite
 
@@ -125,9 +144,10 @@ git diff --check
 
 ### 扫描器阶段
 
-- golden corpus；
-- schema 校验；
-- precision/recall 阈值；
+- corpus schema 与运行时模型漂移检查；
+- 精确 checkout、source span 与 provenance 匹配；
+- auto-confirm precision、candidate recall、unsafe promotion、exclusion leakage 和 unmatched 门禁；
+- 独立抽样审计报告；
 - 安装 wheel 后的 CLI smoke。
 
 ### Overlay 阶段

@@ -6,9 +6,9 @@
 
 ## 当前状态
 
-项目处于工程基础和扫描器设计阶段。目前已经完成架构与上游调研，CLI 仍是占位实现，尚不能扫描或改写 Zed。
+项目处于扫描器实施前的评估协议校准阶段。目前已经完成架构、上游调研，以及固定 Zed commit 的 250 条阶段 0 UI 文本参考语料；CLI 仍是占位实现，尚不能扫描或改写 Zed。
 
-当前第一个产品里程碑是：对指定 Zed crate 进行只读扫描，输出可解释、可审核的 UI 文本 inventory，不生成目录也不修改源码。
+当前下一步是阶段 0.5：固定扫描结果与参考语料的匹配和评分协议，补充高风险样本，并把复杂 API 建模为多个文本槽位。随后第一个产品里程碑是对指定 Zed crate 进行只读扫描，输出可解释、可审核的 `scan-result`，不生成目录也不修改源码。
 
 ## 核心边界
 
@@ -38,6 +38,7 @@ uv run python scripts/check.py
 - [工作项规范](docs/work/README.md)
 - [Zed 上游国际化调研](docs/research/zed-upstream-i18n.md)
 - [阶段 0 金标语料调研](docs/research/zed-phase-0-golden-corpus.md)
+- [扫描器评估契约 ADR](docs/decisions/0003-scanner-evaluation-contract.md)
 - [AI 工程化调研](docs/research/ai-engineering-governance.md)
 
 ## 目录方向

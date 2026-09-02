@@ -55,3 +55,7 @@ JSONL 是人工审核事实来源，不复制未来 inventory schema。校验器
 - 金标规模增长到 JSONL 人工维护明显不可靠。
 - 阶段 1 证明现有字段不能计算目标 precision/recall 或表达关键语义。
 - 上游正式 i18n API 提供更稳定的消息身份和所有权边界。
+
+## 后续关系
+
+阶段 0 实施后触发了“现有字段不能完整表达评估单元”的重新评估条件。v1 继续作为冻结的阶段 0 快照；阶段 0.5 的精确 span、provenance 匹配、文本槽位和指标定义由 [ADR 0003](0003-scanner-evaluation-contract.md) 约束。

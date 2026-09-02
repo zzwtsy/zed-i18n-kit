@@ -2,12 +2,14 @@
 
 ## 1. 文档状态
 
-- 状态：经 Zed 上游 Discussions、Issues、Pull Requests 与社区实现调研修订
+- 状态：经 Zed 上游调研与阶段 0 金标语料实施复盘修订
 - 调查对象：`local/zed`
 - 调查基线：Zed commit `2551721adb5b`（2026-09-01）
 - 工具仓库：`zed-i18n-kit`
 - 本文范围：架构与实施边界，不包含代码实现
 - 上游调研：[Zed 上游国际化调研](research/zed-upstream-i18n.md)
+- 阶段 0 调研：[Zed 阶段 0 UI 文本金标语料调研](research/zed-phase-0-golden-corpus.md)
+- 评估契约：[ADR 0003：扫描器评估单元与文本槽位](decisions/0003-scanner-evaluation-contract.md)
 - 交付约束：不长期维护 Zed fork；所有 Zed 源码修改均由本项目针对指定 commit 临时生成
 
 ## 2. 目标
@@ -51,7 +53,9 @@ UI 文本候选 IR
 
 ### 3.1 当前项目状态
 
-`zed-i18n-kit` 当前是一个 Python 3.13 项目骨架，没有解析器或运行时依赖。`local/zed` 是一个独立且完整的 Zed Rust workspace，并通过当前仓库的 `.gitignore` 排除。
+`zed-i18n-kit` 当前已完成阶段 0：针对固定 Zed commit 建立了 250 条版本化 UI 文本参考样本、严格运行时校验器、覆盖配额和源码 anchor 验证。Tree-sitter 扫描器、持久 inventory、运行时和 Overlay 尚未实现。`local/zed` 是一个独立且完整的 Zed Rust workspace，并通过当前仓库的 `.gitignore` 排除。
+
+阶段 0 证明了 occurrence、sink、所有权和源码作用域必须共同参与判断，也暴露出两个实施前置条件：扫描器结果与参考样本需要精确匹配协议；Prompt、Toast 等 API 需要多个文本槽位而不是单一参数编号。这两个问题在阶段 0.5 解决，不把未定义的评估口径带入扫描器实现。
 
 这意味着系统应划分为持久资产、外部输入和派生工作区三个边界：
 
@@ -200,29 +204,30 @@ rules/
 └── prompts/
 ```
 
-每个 pack 必须包含支持的 Zed commit/version 范围、sink、文本所有权边界、evaluator、rewrite 策略、正反 fixtures 和已知限制。基础 sink 仍使用声明式数据，例如：
+每个 pack 必须包含支持的 Zed commit/version 范围、sink、文本所有权边界、evaluator、rewrite 策略、正反 fixtures 和已知限制。一个 sink 可以声明多个文本槽位；槽位通过可解释的 value path 区分普通参数、`Option` 内部值和集合元素。以下只是概念表示，不冻结最终 rule pack 文件语法：
 
 ```toml
 [[sinks]]
 symbol = "ui::Label::new"
-argument = 0
-kind = "visible_text"
+slots = [{ path = "arg[0]", kind = "visible_text" }]
 
 [[sinks]]
 symbol = "ui::Button::new"
-argument = 1
-kind = "visible_text"
+slots = [
+  { path = "arg[0]", kind = "identity", disposition = "excluded" },
+  { path = "arg[1]", kind = "visible_text" },
+]
 
 [[sinks]]
-symbol = "ui::Tooltip::text"
-argument = 0
-kind = "tooltip"
-
-[[sinks]]
-symbol = "ui::Button::aria_label"
-argument = 0
-kind = "accessibility"
+symbol = "gpui::Window::prompt"
+slots = [
+  { path = "arg[1]", kind = "prompt_message" },
+  { path = "arg[2].Some", kind = "prompt_detail" },
+  { path = "arg[3][*]", kind = "prompt_action" },
+]
 ```
+
+每个槽位独立产生 occurrence、证据和处置结果。同一调用中的 Element ID、可见标签、详情和按钮不能合并成一个候选。Tooltip、ARIA、Toast action 等 builder 方法继续作为各自符号的文本槽位建模。
 
 规则不能只依赖方法短名称，应尽量解析：
 
@@ -273,7 +278,7 @@ Occurrence
 ├── byte_range
 ├── syntax_kind
 ├── sink_symbol
-├── sink_argument
+├── sink_slot
 ├── expression
 ├── enclosing_module
 ├── enclosing_function
@@ -327,6 +332,18 @@ Message
 
 Message ID 是跨 Zed 版本的稳定语义身份；Occurrence 只是某个 commit 中的源码位置。文件路径、行号和 byte range 不能充当 Message 身份。`structural_fingerprint` 应组合 enclosing symbol、sink、参数位置、表达式结构和 domain，用于识别代码移动，但不能在匹配不唯一时跳过人工审核。
 
+### 5.3 Scan result 与评估单元
+
+阶段 1 输出的是确定性、版本化的 `scan-result`，不是已经冻结 Message ID 和人工决定的持久 inventory。阶段 2 才把审核状态、稳定 Message ID 和版本对账信息写入持久 inventory。
+
+参考语料的评估单元必须区分：
+
+- `sink_slot`：具体调用中的一个文本槽位；
+- `expression_origin`：经局部变量、`if`、`match` 或 `format!` 传播的表达式来源；
+- `scope_exclusion`：因 test、example、component preview 或生成边界被排除的源码区域。
+
+匹配优先使用 Zed commit、source path 和精确 UTF-8 byte range。`expression_origin` 可以匹配 occurrence 的结构化 provenance range；不能按英文文本、模糊行号或最相似上下文自动配对。具体兼容性约束见 [ADR 0003](decisions/0003-scanner-evaluation-contract.md)。
+
 ## 6. 有界数据流分析
 
 第一版采用函数内反向追踪，不立即实现全程序分析：
@@ -339,12 +356,13 @@ Message ID 是跨 Zed 版本的稳定语义身份；Occurrence 只是某个 comm
 6. 参数来自外部对象时标记动态来源，不自动翻译。
 7. 追踪超过函数边界时先标记为 `review_required`。
 
-所有分析结果都应携带置信度：
+所有分析结果都应携带处置结果和可解释证据：
 
-- `confirmed`：完整 sink 与表达式证据，可进入自动流程；
-- `probable`：有较强语法或导入证据，需要审查；
-- `review_required`：间接来源、复杂传播或语义边界不明确；
+- `confirmed`：完整 sink、文本槽位和所有权证据，可进入自动流程；
+- `review_required`：间接来源、复杂传播、低置信符号解析或语义边界不明确；
 - `excluded`：已确认不是可翻译产品文本。
+
+confidence 可以作为内部证据等级，但不能创建与 `review_required` 行为相同的第四种持久状态。内部 `probable` 必须对外映射为 `review_required`。
 
 只有 `confirmed` 或已经人工接受的项允许进入源码改写。
 
@@ -614,7 +632,7 @@ zed-i18n check
 
 ## 12. 实施阶段
 
-### 阶段 0：建立金标语料
+### 阶段 0：建立金标语料（已完成）
 
 从代表性 crate 中手工标注 200～300 个样本，至少覆盖：
 
@@ -627,12 +645,23 @@ zed-i18n check
 - Toast、Prompt、ARIA；
 - 测试和 component preview。
 
+当前 v1 语料固定为阶段 0 的可审计快照，不静默修改字段含义。
+
+### 阶段 0.5：评估协议与风险样本校准
+
+- 建立新的 corpus schema version 或显式迁移，表达 subject kind、精确 source span、text slot、期望发现状态、期望处置和 review state；
+- 定义 scan result 与 sink/origin/provenance 的精确匹配算法；
+- 固定 auto-confirm precision、candidate recall、unsafe promotion、exclusion leakage 和 unmatched 的计算方式；
+- 补充 `.child()` receiver、Prompt 多槽位、拼接/`push_str`、多行 raw string、跨函数 helper、内嵌 `#[cfg(test)]`、用户/协议内容和错误链样本；
+- 加入 schema 与运行时模型漂移检查，并要求评估输入是相关路径干净或有内容摘要的精确 checkout。
+
 ### 阶段 1：只读扫描器
 
 - 完成文件发现和排除规则；
 - 接入 Tree-sitter Rust；
 - 建立第一批 domain rule packs；
-- 输出稳定 JSONL inventory；
+- 输出确定性、版本化的 JSONL `scan-result`；
+- 实现 corpus 评分器并通过阶段 0.5 的回归门禁；
 - 不生成目录，不改写源码。
 
 ### 阶段 2：持久 inventory 与版本对账
@@ -697,10 +726,14 @@ zed-i18n check
 ### 扫描与分类
 
 - 目标生产 Rust 文件解析成功率为 100%，失败项必须显式报告；
-- 金标集中自动确认候选 precision 不低于 99%；
-- 总候选 recall 不低于 95%；
+- 固定 corpus 中 auto-confirm precision 不低于 99%；
+- 固定 corpus 中 candidate recall 不低于 95%；
+- `review_required` 被提升为 `confirmed` 的 unsafe promotion 必须单独报告并作为阻塞指标；
+- `excluded` 被输出为候选的 exclusion leakage 和无法精确对齐的 unmatched count 必须单独报告；
 - 未支持的传播或表达式进入 review 队列，不静默丢失；
 - 每个结论都能回溯到源码位置和命中的规则。
+
+上述阈值只证明固定、分层构造 corpus 上的回归表现，不代表完整 Zed workspace 的统计准确率。规则冻结后必须从未用于调优的新路径和高风险结构中抽样，独立审计误报与漏报，并将审计结果与 corpus 指标分别报告。
 
 ### 版本对账
 
@@ -753,7 +786,7 @@ zed-i18n check
 
 项目应定位为“针对原版 Zed 源码进行国际化分析、版本差异对账和临时构建改写的工具链”。项目不维护 Zed fork；永久保存国际化语义和翻译数据，临时生成对指定 Zed commit 的源码 Overlay。
 
-推进顺序应是“金标语料和只读扫描器 → 持久 inventory 与版本对账 → Overlay 物化器 → 最小晚解析 runtime template 与 benchmark → runtime trace/pseudolocale → `go_to_line` → `project_panel` → Action/Command Palette”，然后再按证据扩展到其他 domain。
+推进顺序应是“金标语料 → 评估协议与风险样本校准 → 只读扫描器与 scan result → 独立抽样审计 → 持久 inventory 与版本对账 → Overlay 物化器 → 最小晚解析 runtime template 与 benchmark → runtime trace/pseudolocale → `go_to_line` → `project_panel` → Action/Command Palette”，然后再按证据扩展到其他 domain。
 
 这个顺序能够尽早验证：
 

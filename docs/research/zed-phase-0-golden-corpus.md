@@ -89,3 +89,17 @@ uv run python scripts/check_golden_corpus.py --zed local/zed
 - 多行 raw string、宏展开、跨函数 helper、字符串累积和由错误类型生成的 UI 文本仍需在阶段 1 后根据漏报补样。
 - tests、preview 和 example 的作用域主要由路径和已知组件边界标注；嵌在生产文件内部的 `#[cfg(test)]` 或 preview 实现仍需 parser 级作用域识别。
 - 静态标签需要在后续 runtime trace 和真实 UI smoke 中校正，尤其是外部协议、用户内容和错误链。
+
+## 8. 实施后设计复盘
+
+阶段 0 完成后的只读复盘确认，250 条样本均能在固定 checkout 中定位，当前 anchor 在各自源码行内也均唯一；但这不足以直接定义阶段 1 的 precision 和 recall。实际样本同时包含 sink 调用、局部变量定义、`if`/`match` expression origin 和作用域反例，而扫描器计划输出主要 byte range 与数据流 provenance。阶段 1 前必须先固定评估单元和精确匹配协议。
+
+复盘还发现：
+
+- 当前语料中 `.child()` 只有 1 条，尚不足以判断 receiver 追踪的真实效果；
+- `concatenation`、`user` 和 `protocol` 标签当前没有实际样本；
+- Prompt 的 message、detail 和 answers，以及 Toast 的 identity、message 和 action label，需要按多个文本槽位分别建模；
+- 分层语料适合回归测试，但 `settings_ui` 和 `git_ui` 占比较高，不能据此宣称完整 Zed workspace 的统计准确率；
+- corpus v1 的 `(path, line, anchor)` 能保持人工可审计性，但新的阻塞评估需要精确 source span、origin/sink 角色和 review state。
+
+因此 v1 保持冻结，后续通过阶段 0.5 建立新 schema version 或显式迁移、补充风险样本并实现评估器。长期约束见 [ADR 0003：扫描器评估单元与文本槽位](../decisions/0003-scanner-evaluation-contract.md)。
