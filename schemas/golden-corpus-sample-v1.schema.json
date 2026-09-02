@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/zed-i18n-kit/golden-corpus-sample-v1.schema.json",
+  "title": "Zed UI text golden sample v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "path",
+    "line",
+    "anchor",
+    "scope",
+    "sink_symbol",
+    "sink_kind",
+    "features",
+    "ownership",
+    "decision",
+    "rationale"
+  ],
+  "properties": {
+    "id": { "type": "string", "pattern": "^zed-[0-9a-f]{7}-[0-9]{4}$" },
+    "path": { "type": "string", "pattern": "^crates/.+\\.rs$" },
+    "line": { "type": "integer", "minimum": 1 },
+    "anchor": { "type": "string", "minLength": 1 },
+    "scope": {
+      "enum": ["production", "test", "example", "component_preview"]
+    },
+    "sink_symbol": { "type": ["string", "null"] },
+    "sink_kind": {
+      "enum": [
+        "visible_text",
+        "tooltip",
+        "accessibility",
+        "toast",
+        "prompt",
+        "none",
+        "unknown"
+      ]
+    },
+    "features": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "direct_literal",
+          "builder_argument",
+          "child_argument",
+          "local_variable",
+          "match_expression",
+          "if_expression",
+          "format_template",
+          "concatenation",
+          "dynamic_external",
+          "element_id",
+          "log_or_diagnostic",
+          "path_url_or_command",
+          "toast",
+          "prompt",
+          "accessibility",
+          "test_scope",
+          "preview_scope",
+          "example_scope"
+        ]
+      }
+    },
+    "ownership": {
+      "enum": [
+        "product",
+        "mixed",
+        "user",
+        "protocol",
+        "developer",
+        "identity",
+        "unknown"
+      ]
+    },
+    "decision": { "enum": ["confirmed", "review_required", "excluded"] },
+    "rationale": { "type": "string", "minLength": 1 }
+  }
+}

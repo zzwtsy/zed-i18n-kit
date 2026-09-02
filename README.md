@@ -37,6 +37,7 @@ uv run python scripts/check.py
 - [长期决策记录](docs/decisions/README.md)
 - [工作项规范](docs/work/README.md)
 - [Zed 上游国际化调研](docs/research/zed-upstream-i18n.md)
+- [阶段 0 金标语料调研](docs/research/zed-phase-0-golden-corpus.md)
 - [AI 工程化调研](docs/research/ai-engineering-governance.md)
 
 ## 目录方向
