@@ -1,0 +1,4 @@
+interface:
+  display_name: "Create Good Commit"
+  short_description: "检查、拆分并创建可靠的 Conventional Commits"
+  default_prompt: "Use $create-good-commit to inspect the current changes and create a focused, validated Conventional Commit."

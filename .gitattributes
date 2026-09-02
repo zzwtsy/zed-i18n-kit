@@ -1,0 +1,53 @@
+.agents/** linguist-generated=true
+
+# Normalize text files to LF in the repository and working tree.
+* text=auto eol=lf
+
+# Project text files.
+*.py text eol=lf
+*.pyi text eol=lf
+*.toml text eol=lf
+*.md text eol=lf
+*.rst text eol=lf
+*.txt text eol=lf
+*.json text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.ini text eol=lf
+*.cfg text eol=lf
+*.sh text eol=lf
+*.zsh text eol=lf
+*.ps1 text eol=lf
+*.svg text eol=lf
+Dockerfile text eol=lf
+.gitattributes text eol=lf
+.gitignore text eol=lf
+.python-version text eol=lf
+uv.lock text eol=lf
+
+# Windows command scripts require CRLF for broad compatibility.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary assets and archives.
+*.avif binary
+*.bmp binary
+*.gif binary
+*.ico binary
+*.jpeg binary
+*.jpg binary
+*.png binary
+*.webp binary
+*.eot binary
+*.otf binary
+*.ttf binary
+*.woff binary
+*.woff2 binary
+*.pdf binary
+*.7z binary
+*.bz2 binary
+*.gz binary
+*.tar binary
+*.whl binary
+*.xz binary
+*.zip binary

@@ -1,0 +1,6 @@
+interface:
+  display_name: "Python 强类型"
+  short_description: "严格、现代且检查器无关的 Python 静态类型建模"
+  default_prompt: "使用 $python-strong-typing 设计或修复这段 Python 代码的类型模型，不通过 Any、cast 或忽略诊断绕过问题。"
+policy:
+  allow_implicit_invocation: true
