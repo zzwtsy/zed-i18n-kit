@@ -141,7 +141,7 @@ rules/
 └── prompts/
 ```
 
-每个 pack 至少声明：支持的 Zed commit/version 范围、sink、翻译边界、局部 evaluator、rewrite 策略、正反 fixtures 和已知限制。
+每个 pack 至少声明：明确的 tested commits、capability requirements/probes、sink、翻译边界、局部 evaluator、rewrite 策略、正反 fixtures 和已知限制。Git commit 不存在可靠的连续兼容区间，未经测试的 commit 只能通过能力探测进入 `compatible_unverified`。
 
 ### 7.4 可再生成的迁移单位
 

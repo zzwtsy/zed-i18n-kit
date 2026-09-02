@@ -8,7 +8,7 @@
 
 项目已经完成扫描器实施前的阶段 0.5 评估协议校准：当前唯一支持的 corpus schema 是 v2，共 266 条样本，并提供 UTF-8 byte span、文本槽位、源码摘要、exact span/provenance 匹配和固定指标计算。旧 v1 格式已删除，不提供兼容读取或迁移入口。CLI 仍是占位实现，尚不能扫描或改写 Zed。
 
-当前下一步是阶段 1：对指定 Zed crate 实施只读扫描器，输出可解释、可审核的 `scan-result`，并通过阶段 0.5 的 corpus 回归门禁；该阶段不生成翻译目录，也不修改源码。
+当前下一步是阶段 1A：先用 10～20 个代表性真实样本闭合 Tree-sitter CST、canonical span、持久 `scan-result-v1` 和评分报告，再扩展只读扫描规则。该阶段不生成翻译目录，也不修改源码。
 
 ## 核心边界
 
@@ -41,6 +41,7 @@ uv run python scripts/check_golden_corpus.py --zed local/zed
 - [阶段 0 金标语料调研](docs/research/zed-phase-0-golden-corpus.md)
 - [扫描器评估契约 ADR](docs/decisions/0003-scanner-evaluation-contract.md)
 - [直接切换 v2 ADR](docs/decisions/0004-direct-v2-cutover.md)
+- [阶段 1 评估闭环优先 ADR](docs/decisions/0005-phase-1-evaluation-loop-first.md)
 - [AI 工程化调研](docs/research/ai-engineering-governance.md)
 
 ## 目录方向

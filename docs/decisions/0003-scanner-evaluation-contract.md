@@ -111,4 +111,4 @@ MVP 对外只输出 `confirmed`、`review_required` 和 `excluded`。内部若�
 
 ## 后续关系
 
-[ADR 0004](0004-direct-v2-cutover.md) 取消了本 ADR 中“继续读取和验证 v1”的兼容后果；评估单元、文本槽位、匹配和指标决定继续有效。
+[ADR 0004](0004-direct-v2-cutover.md) 取消了本 ADR 中“继续读取和验证 v1”的兼容后果；评估单元、文本槽位和 scan-result/persistent inventory 分层继续有效。[ADR 0005](0005-phase-1-evaluation-loop-first.md) 根据阶段 0.5 实施证据细化了 canonical span、nullable origin constraint、unlabeled occurrence、auto-confirm coverage 和 review-state-aware 门禁，并取代本 ADR 中较粗的 unmatched 与固定阈值解释。

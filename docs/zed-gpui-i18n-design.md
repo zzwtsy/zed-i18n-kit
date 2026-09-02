@@ -2,7 +2,7 @@
 
 ## 1. 文档状态
 
-- 状态：经 Zed 上游调研与阶段 0 金标语料实施复盘修订
+- 状态：经 Zed 上游调研、阶段 0/0.5 实施与评估协议复盘修订
 - 调查对象：`local/zed`
 - 调查基线：Zed commit `2551721adb5b`（2026-09-01）
 - 工具仓库：`zed-i18n-kit`
@@ -10,6 +10,7 @@
 - 上游调研：[Zed 上游国际化调研](research/zed-upstream-i18n.md)
 - 阶段 0 调研：[Zed 阶段 0 UI 文本金标语料调研](research/zed-phase-0-golden-corpus.md)
 - 评估契约：[ADR 0003：扫描器评估单元与文本槽位](decisions/0003-scanner-evaluation-contract.md)
+- 阶段 1 顺序：[ADR 0005：阶段 1 先闭合扫描评估协议](decisions/0005-phase-1-evaluation-loop-first.md)
 - 交付约束：不长期维护 Zed fork；所有 Zed 源码修改均由本项目针对指定 commit 临时生成
 
 ## 2. 目标
@@ -53,9 +54,9 @@ UI 文本候选 IR
 
 ### 3.1 当前项目状态
 
-`zed-i18n-kit` 当前已完成阶段 0：针对固定 Zed commit 建立了 250 条版本化 UI 文本参考样本、严格运行时校验器、覆盖配额和源码 anchor 验证。Tree-sitter 扫描器、持久 inventory、运行时和 Overlay 尚未实现。`local/zed` 是一个独立且完整的 Zed Rust workspace，并通过当前仓库的 `.gitignore` 排除。
+`zed-i18n-kit` 当前已完成阶段 0 和阶段 0.5：针对固定 Zed commit 建立了唯一的 corpus v2，共 266 条版本化 UI 文本参考样本，并实现严格运行时校验、源码摘要、精确 byte span 和小型内存评估器。Tree-sitter 扫描器、持久化 scan-result 协议、persistent inventory、运行时和 Overlay 尚未实现。`local/zed` 是一个独立且完整的 Zed Rust workspace，并通过当前仓库的 `.gitignore` 排除。
 
-阶段 0 证明了 occurrence、sink、所有权和源码作用域必须共同参与判断，也暴露出两个实施前置条件：扫描器结果与参考样本需要精确匹配协议；Prompt、Toast 等 API 需要多个文本槽位而不是单一参数编号。这两个问题在阶段 0.5 解决，不把未定义的评估口径带入扫描器实现。
+阶段 0.5 证明了 occurrence、sink、所有权和源码作用域必须共同参与判断，并解决了 subject kind、多文本槽位、源码快照和基础指标建模。但实施复盘也确认，canonical CST span、nullable origin constraint、corpus 外发现、自动确认覆盖率和独立复核门禁仍需由真实 Tree-sitter 原型闭合。后续不推翻总体架构，而是先完成阶段 1A 协议闭环，再扩大扫描规则。
 
 这意味着系统应划分为持久资产、外部输入和派生工作区三个边界：
 
@@ -140,7 +141,7 @@ Zed 的通用 i18n 主 Issue 仍处于开放状态，完整 Fluent 方案和大�
 └──────────────────────┬────────────────────────┘
                        ↓
 ┌───────────────────────────────────────────────┐
-│ Inventory：Occurrence IR、置信度、人工决策       │
+│ Analysis Result：Occurrence IR、证据与处置建议   │
 └──────────────────────┬────────────────────────┘
                        ↓
 ┌───────────────────────────────────────────────┐
@@ -204,7 +205,7 @@ rules/
 └── prompts/
 ```
 
-每个 pack 必须包含支持的 Zed commit/version 范围、sink、文本所有权边界、evaluator、rewrite 策略、正反 fixtures 和已知限制。一个 sink 可以声明多个文本槽位；槽位通过可解释的 value path 区分普通参数、`Option` 内部值和集合元素。以下只是概念表示，不冻结最终 rule pack 文件语法：
+每个 pack 必须包含明确的 tested commits、capability requirements/probes、sink、文本所有权边界、evaluator、rewrite 策略、正反 fixtures 和已知限制。不得把任意两个 Git commit 之间声明为连续兼容区间。一个 sink 可以声明多个文本槽位；槽位通过可解释的 value path 区分普通参数、`Option` 内部值和集合元素。以下只是概念表示，不冻结最终 rule pack 文件语法：
 
 ```toml
 [[sinks]]
@@ -275,7 +276,7 @@ Tree-sitter 和规则系统无法可靠解决以下问题时，可以增加一�
 Occurrence
 ├── source_commit
 ├── source_path
-├── byte_range
+├── primary_span
 ├── syntax_kind
 ├── sink_symbol
 ├── sink_slot
@@ -288,6 +289,8 @@ Occurrence
 ├── confidence
 └── structural_fingerprint
 ```
+
+`primary_span` 是文本槽位实际取值对应的最小完整 Rust 表达式，不包含外层 sink 调用、参数分隔符或仅用于定位的 wrapper。`provenance` 保存经局部变量、分支、格式化或拼接追踪到的结构化来源 span。enclosing call、行列和 anchor 可以作为人工审计上下文，但不参与精确身份匹配。具体 Tree-sitter node 映射必须由阶段 1A 的真实 fixtures 固定，不能仅依据当前 corpus anchor 反推。
 
 `resolution_lifecycle` 描述消息必须在哪个边界解析：
 
@@ -334,7 +337,7 @@ Message ID 是跨 Zed 版本的稳定语义身份；Occurrence 只是某个 comm
 
 ### 5.3 Scan result 与评估单元
 
-阶段 1 输出的是确定性、版本化的 `scan-result`，不是已经冻结 Message ID 和人工决定的持久 inventory。阶段 2 才把审核状态、稳定 Message ID 和版本对账信息写入持久 inventory。
+阶段 1 输出的是确定性、版本化的 `scan-result`，不是已经冻结 Message ID 和人工决定的持久 inventory。阶段 2 才把审核状态、稳定 Message ID 和版本对账信息写入 persistent inventory。架构图中的 Analysis Result 表示一次扫描产物，不是跨版本人工事实来源。
 
 参考语料的评估单元必须区分：
 
@@ -342,7 +345,11 @@ Message ID 是跨 Zed 版本的稳定语义身份；Occurrence 只是某个 comm
 - `expression_origin`：经局部变量、`if`、`match` 或 `format!` 传播的表达式来源；
 - `scope_exclusion`：因 test、example、component preview 或生成边界被排除的源码区域。
 
-匹配优先使用 Zed commit、source path 和精确 UTF-8 byte range。`expression_origin` 可以匹配 occurrence 的结构化 provenance range；不能按英文文本、模糊行号或最相似上下文自动配对。具体兼容性约束见 [ADR 0003](decisions/0003-scanner-evaluation-contract.md)。
+匹配优先使用 Zed commit、source path 和精确 UTF-8 byte range。`sink_slot` 必须匹配 primary span；`expression_origin` 匹配 occurrence 的结构化 provenance span。origin 样本中非空 sink/slot 是必须相等的约束，`null` 表示该维度不参与匹配；多个结果满足约束时必须报告歧义。不能按英文文本、模糊行号或最相似上下文自动配对。具体约束见 [ADR 0003](decisions/0003-scanner-evaluation-contract.md) 和 [ADR 0005](decisions/0005-phase-1-evaluation-loop-first.md)。
+
+评估结果必须区分：应发现样本缺失的 `unmatched_sample`、一个样本多重命中的 `ambiguous_sample`、协议或快照无效的 `invalid_result`，以及 corpus 没有穷举标注的 `unlabeled_occurrence`。前三类可以阻塞 corpus 门禁；未标注 occurrence 进入独立审计队列，不直接计为误报，也不自动视为正确。
+
+持久 `scan-result-v1` 至少记录 Zed commit、工具版本、rule pack 版本、配置 hash、capability probe、扫描范围和相关文件 SHA-256。相同 HEAD 但相关文件内容不同的结果必须拒绝评分。同一输入和配置重复扫描应产生 byte-for-byte 相同的序列化结果。
 
 ## 6. 有界数据流分析
 
@@ -619,6 +626,8 @@ zed-i18n catalog check
 zed-i18n check
 ```
 
+这是目标生命周期，不是阶段 1 的一次性 CLI 承诺。阶段 1 只冻结只读 `scan`、scan-result `evaluate` 和 corpus check；其余命令在对应持久状态、Overlay 或 runtime 阶段再确定参数与兼容性。
+
 其中：
 
 - `scan` 永远只读；
@@ -655,16 +664,36 @@ zed-i18n check
 - 补充 `.child()` receiver、Prompt 多槽位、拼接/`push_str`、多行 raw string、跨函数 helper、内嵌 `#[cfg(test)]`、用户/协议内容和错误链样本；
 - 加入 schema 与运行时模型漂移检查，并要求评估输入是相关路径干净或有内容摘要的精确 checkout。
 
-当前唯一的 v2 corpus 包含 266 条样本，其中 16 条用于校准高风险结构。v2 使用文件级 UTF-8 byte span 和相关 Rust 文件 SHA-256；评估器要求 sink slot 使用 primary span，expression origin 使用结构化 provenance range，并分别报告 unmatched sample、未配对 occurrence 和重复匹配。v1 资产和兼容代码已按 [ADR 0004](decisions/0004-direct-v2-cutover.md) 删除。该结果只建立阶段 1 的评估地基，不代表扫描器已经实现。
+当前唯一的 v2 corpus 包含 266 条样本，其中 16 条用于校准高风险结构。v2 使用文件级 UTF-8 byte span 和相关 Rust 文件 SHA-256；小型评估器实现了 exact span/provenance 匹配和基础指标。v1 资产和兼容代码已按 [ADR 0004](decisions/0004-direct-v2-cutover.md) 删除。
 
-### 阶段 1：只读扫描器
+阶段 0.5 后复盘确认，现有 span 尚未全部由 canonical CST 节点规则验证，nullable origin constraint、未配对 occurrence 和自动确认覆盖门禁也仍是原型语义。该结果只建立阶段 1 的评估地基，不代表持久 scan-result 契约已经冻结；调整决定见 [ADR 0005](decisions/0005-phase-1-evaluation-loop-first.md)。
+
+### 阶段 1A：扫描评估协议闭环
+
+- 接入 Tree-sitter Rust，使用 10～20 个代表性真实样本验证 CST range；
+- 固定 primary span、provenance span、wrapper 归一化和 nullable origin constraint；
+- 建立 `scan-result-v1` JSON schema、严格解析与确定性序列化；
+- 记录 Zed/tool/rule/config/capability/scope 和相关文件摘要；
+- 区分 unmatched、ambiguous、invalid 和 unlabeled occurrence；
+- 增加 auto-confirm coverage 与 review-state-aware 指标；
+- 不以规则覆盖率为目标，不生成目录，不改写源码。
+
+### 阶段 1B：只读扫描器
 
 - 完成文件发现和排除规则；
-- 接入 Tree-sitter Rust；
-- 建立第一批 domain rule packs；
-- 输出确定性、版本化的 JSONL `scan-result`；
-- 实现 corpus 评分器并通过阶段 0.5 的回归门禁；
+- 实现 `cfg`、import、alias 和候选符号解析；
+- 以 typed builtin rules 建立第一批 domain rule packs；
+- 实现函数内反向追踪和保守降级；
+- 使用阶段 1A 协议输出确定性、版本化的 scan-result；
 - 不生成目录，不改写源码。
+
+### 阶段 1C：规则冻结与独立审计
+
+- 独立复核按风险和 disposition 分层的 corpus 子集；
+- 对 independently reviewed 子集执行 precision、coverage、recall 和安全门禁；
+- 审计 corpus 外的 `unlabeled_occurrence`，区分合法发现、规则误报和需补金标结构；
+- 固定首批允许自动确认的规则、tested commits 和 capability probes；
+- 量化 Tree-sitter 在 receiver、宏、helper 和跨函数语义上的缺口，再决定是否评估 rust-analyzer sidecar。
 
 ### 阶段 2：持久 inventory 与版本对账
 
@@ -728,10 +757,13 @@ zed-i18n check
 ### 扫描与分类
 
 - 目标生产 Rust 文件解析成功率为 100%，失败项必须显式报告；
-- 固定 corpus 中 auto-confirm precision 不低于 99%；
-- 固定 corpus 中 candidate recall 不低于 95%；
+- auto-confirm precision 与 auto-confirm coverage 必须同时报告，任一分母为零都不能视为通过；
+- candidate recall、unsafe promotion 和 exclusion leakage 必须分别报告；
+- `single_review` 样本只提供 observational 指标，阻塞门禁只使用满足分层覆盖要求的 `independently_reviewed` 子集；
+- 99% auto-confirm precision 和 95% candidate recall 保留为质量目标，阶段 1C 根据独立复核样本量确定首个可执行门禁，不能在样本不足时宣称达到目标；
 - `review_required` 被提升为 `confirmed` 的 unsafe promotion 必须单独报告并作为阻塞指标；
-- `excluded` 被输出为候选的 exclusion leakage 和无法精确对齐的 unmatched count 必须单独报告；
+- `excluded` 被输出为候选的 exclusion leakage、无法精确对齐的 unmatched/ambiguous 和无效快照必须单独报告；
+- corpus 外 occurrence 作为 `unlabeled_occurrence` 单独审计，不计入 corpus precision，也不自动视为正确；
 - 未支持的传播或表达式进入 review 队列，不静默丢失；
 - 每个结论都能回溯到源码位置和命中的规则。
 
@@ -788,7 +820,7 @@ zed-i18n check
 
 项目应定位为“针对原版 Zed 源码进行国际化分析、版本差异对账和临时构建改写的工具链”。项目不维护 Zed fork；永久保存国际化语义和翻译数据，临时生成对指定 Zed commit 的源码 Overlay。
 
-推进顺序应是“金标语料 → 评估协议与风险样本校准 → 只读扫描器与 scan result → 独立抽样审计 → 持久 inventory 与版本对账 → Overlay 物化器 → 最小晚解析 runtime template 与 benchmark → runtime trace/pseudolocale → `go_to_line` → `project_panel` → Action/Command Palette”，然后再按证据扩展到其他 domain。
+推进顺序应是“金标语料 → 评估协议与风险样本校准 → 阶段 1A 最小 CST/scan-result/评分闭环 → 阶段 1B 只读扫描器 → 阶段 1C 规则冻结与独立审计 → 持久 inventory 与版本对账 → Overlay 物化器 → 最小晚解析 runtime template 与 benchmark → runtime trace/pseudolocale → `go_to_line` → `project_panel` → Action/Command Palette”，然后再按证据扩展到其他 domain。
 
 这个顺序能够尽早验证：
 
@@ -802,3 +834,5 @@ zed-i18n check
 - 上游同步的长期成本是否可控。
 
 在上述闭环建立前，不应批量替换整个 Zed workspace，不应维护长期修改分支，不应把旧 patch 当作新版输入，不应把 runtime 字符串拦截当作生产翻译方案，也不应把完整 rust-analyzer/HIR 集成作为第一阶段前置条件。
+
+当前主攻方向是阶段 1A，而不是同时扩充 rule pack、CLI 和语义后端。canonical span 必须由真实 Tree-sitter 端到端原型确定；在 snapshot、匹配分类、coverage 和独立复核门禁闭合之前，现有阶段 0.5 指标只能作为探索性证据。

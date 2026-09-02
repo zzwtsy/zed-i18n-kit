@@ -64,19 +64,27 @@ git diff --check
 金标集分别统计：
 
 - auto-confirm precision：预测为 `confirmed` 的样本中，金标允许自动确认的比例；
+- auto-confirm coverage：`review_state=independently_reviewed`、`expected_presence=candidate` 且 `expected_disposition=confirmed` 的样本中，被预测为 `confirmed` 的比例；
 - candidate recall：应发现的样本中，被输出为 `confirmed` 或 `review_required` 的比例；
 - unsafe promotion rate：金标要求审核但被预测为 `confirmed` 的比例；
 - exclusion leakage：金标应排除但被输出为候选的比例；
-- unmatched count：无法按精确 source span 或 provenance 对齐的样本数量。
+- unmatched sample：应发现但无法按精确 primary/provenance span 对齐的样本数量；
+- ambiguous sample：被多个 occurrence 命中的样本数量；
+- unlabeled occurrence：扫描结果中没有 corpus 对应项的发现数量，仅进入独立审计，不计入 corpus precision。
 
-指标必须固定样本版本、Zed commit、扫描配置和计算脚本。corpus 阈值是回归门禁，不得表述为完整 Zed workspace 的统计准确率。规则冻结后，从未参与调优的新路径和高风险结构中抽样，独立审计误报与漏报；两类结果分别报告。
+指标必须固定样本版本、Zed commit、扫描配置和计算脚本。auto-confirm precision 与 coverage 必须同时设门禁；任一分母为零时结果是 undefined，不能视为通过。`single_review` 样本只提供 observational 指标，阻塞门禁只消费满足分层覆盖要求的 `independently_reviewed` 子集，并显式报告样本量。`disputed` 样本不用于证明自动确认安全性。
+
+corpus 阈值是回归门禁，不得表述为完整 Zed workspace 的统计准确率。规则冻结后，从未参与调优的新路径和高风险结构中抽样，独立审计误报与漏报；corpus 回归、未标注 occurrence 审计和独立抽样结果分别报告。
 
 评估输入必须满足以下要求：
 
 - 相关 Zed 路径工作树干净，或 scan snapshot 记录并验证文件内容摘要；
-- anchor 在声明范围内唯一，评估匹配使用精确 UTF-8 byte range；
-- expression origin 只能通过结构化 provenance 匹配，不能按英文文本模糊关联；
-- 重复匹配、span 失效和 provenance 缺失产生明确失败或 unmatched；
+- `scan-result-v1` 记录 Zed commit、工具版本、rule pack 版本、配置 hash、capability probe、扫描范围和相关文件 SHA-256；
+- primary span 是文本槽位取值的最小完整 Rust 表达式；anchor 和 enclosing call 只用于审计；
+- expression origin 只能通过结构化 provenance 匹配；非空 sink/slot 是严格约束，`null` 表示该维度不参与匹配；
+- 重复匹配、span 失效、provenance 缺失和 snapshot 漂移产生明确 ambiguous、unmatched 或 invalid 结果；
+- corpus 外 occurrence 进入 unlabeled 审计队列，不按英文文本模糊关联，也不因缺少金标自动判错；
+- 同一输入、工具、规则和配置重复扫描产生 byte-for-byte 相同的序列化结果；
 - corpus schema 与 Python 运行时模型存在自动漂移检查。
 
 ### 4.3 Inventory 与持久 schema
@@ -86,7 +94,7 @@ git diff --check
 - 旧版本读取或明确拒绝策略；
 - Message ID 与 Occurrence 身份分离；
 - 序列化结果确定性和隐私字段检查。
-- 阶段 1 `scan-result` 不携带已冻结 Message ID 或跨版本审核状态；阶段 2 persistent inventory 才建立这些承诺。
+- 阶段 1 `scan-result` 必须携带可验证 snapshot 和规则证据，但不携带已冻结 Message ID 或跨版本审核状态；阶段 2 persistent inventory 才建立这些承诺。
 
 ### 4.4 Rewrite
 
@@ -146,8 +154,9 @@ git diff --check
 
 ### 扫描器阶段
 
-- 精确 checkout、source span 与 provenance 匹配；
-- auto-confirm precision、candidate recall、unsafe promotion、exclusion leakage 和 unmatched 门禁；
+- 精确 checkout、canonical primary span、provenance 与 snapshot 匹配；
+- auto-confirm precision、coverage、candidate recall、unsafe promotion、exclusion leakage 和 unmatched/ambiguous 门禁；
+- unlabeled occurrence 审计报告；
 - 独立抽样审计报告；
 - 安装 wheel 后的 CLI smoke。
 
