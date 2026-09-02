@@ -8,9 +8,9 @@
 
 项目已经完成阶段 1A 扫描评估协议闭环和阶段 1B 只读扫描器，并进入阶段 1C 独立审核：当前唯一支持的 corpus schema 是 v2，共 266 条样本；Tree-sitter Rust 使用其中 16 条高风险样本校准 canonical span，并提供持久 `scan-result-v1`、源码快照校验、exact span/provenance 评估和只读 CLI。旧 v1 corpus 格式已删除，不提供兼容读取或迁移入口。
 
-默认 `scan` 已按 `crates/*/src/**/*.rs` 发现生产 Rust 文件，并排除测试、examples、benches、fixtures、component preview 和生成路径；固定 10 文件 profile 仅保留为阶段 1A 协议回归。首批 9 条 typed builtin rules 覆盖 GPUI component、Prompt、Notification、ARIA 和受 receiver 约束的 `.child()`，显式 import/alias 可以精确解析，通配符和父模块重导出保守进入 `review_required`。
+默认 `scan` 已按 `crates/*/src/**/*.rs` 发现生产 Rust 文件，并排除测试、examples、benches、fixtures、component preview 和生成路径；固定 10 文件 profile 仅保留为阶段 1A 协议回归。当前 15 条 typed builtin rules 覆盖 GPUI component、Prompt、Notification、ARIA、Tooltip（含 `simple`、`for_action_in` 和 `with_meta`）以及受 receiver 约束的 `.child()`，另有 2 条结构化 origin rules；显式 import/alias 可以精确解析，通配符和父模块重导出保守进入 `review_required`。
 
-阶段 1C 已提供不含旧标签或扫描预测的 blind review bundle、严格 review result、分层 unlabeled audit 和 fail-closed `freeze-check`。现有 266 条样本仍全部是 `single_review`，真实 baseline 状态为 `reviewing`，不得宣称规则已经冻结。工具仍不生成翻译目录，也不修改源码。
+阶段 1C-A 已提供不含旧标签或扫描预测的 blind review bundle、严格 review result、分层 workspace holdout audit 和 fail-closed `freeze-check` 基础设施。r2 的真实全量 review 与 100 条 holdout audit 未通过；受控 CST 修复后，外部协议、用户与错误来源仍暴露需要最小 HIR 解析的 exclusion leakage。当前 266 条 corpus 样本仍全部是 `single_review`，规则状态保持 `reviewing`，r2 证据不得作为最终冻结输入。工具仍不生成翻译目录，也不修改源码。
 
 ## 核心边界
 

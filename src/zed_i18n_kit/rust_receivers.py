@@ -17,6 +17,7 @@ class ReceiverEvidence:
 
 
 GPUI_ELEMENT_FACTORIES = (
+    "display_map::FoldPlaceholder::fold_element",
     "gpui::div",
     "ui::Button::new",
     "ui::IconButton::new",
@@ -39,6 +40,7 @@ GPUI_ELEMENT_TYPES = (
 )
 
 GPUI_WINDOW_TYPES = ("gpui::Window", "ui::Window")
+SETTINGS_WINDOW_TYPES = ("settings_ui::SettingsWindow",)
 
 
 def resolve_receiver(
@@ -61,6 +63,16 @@ def resolve_receiver(
             symbol_table,
             scope,
             value_targets=GPUI_WINDOW_TYPES,
+            factory_targets=(),
+            visited=set(),
+        )
+    if requirement is ReceiverRequirement.SETTINGS_WINDOW:
+        return _resolve_typed_value(
+            receiver,
+            tree,
+            symbol_table,
+            scope,
+            value_targets=SETTINGS_WINDOW_TYPES,
             factory_targets=(),
             visited=set(),
         )

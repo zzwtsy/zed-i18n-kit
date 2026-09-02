@@ -36,7 +36,8 @@ from zed_i18n_kit.schema_resources import (
 from zed_i18n_kit.unlabeled_audit import (
     AUDIT_SAMPLE_FIELDS,
     AuditBundle,
-    AuditClassification,
+    AuditDisposition,
+    AuditOutcome,
     UnlabeledAuditError,
     build_audit_bundle,
     parse_audit_bundle_json,
@@ -135,7 +136,7 @@ def test_audit_result_reconciliation_counts_classes_and_reports_missing(
 
     assert not report.is_complete
     assert len(report.missing_occurrence_ids) == 1
-    assert sum(report.classification_counts.values()) == 2
+    assert sum(report.expected_disposition_counts.values()) == 2
     assert serialized["complete"] is False
 
 
@@ -164,6 +165,15 @@ def test_audit_result_rejects_unknown_fields_duplicates_and_identity_drift(
     assert isinstance(decisions, list)
     first = decisions[0]
     assert isinstance(first, dict)
+    first["classification"] = "false_positive"
+    with pytest.raises(UnlabeledAuditError, match="fields differ"):
+        parse_audit_result_json(json.dumps(payload))
+
+    payload = _result_payload(bundle)
+    decisions = payload["decisions"]
+    assert isinstance(decisions, list)
+    first = decisions[0]
+    assert isinstance(first, dict)
     decisions.append(dict(first))
     with pytest.raises(UnlabeledAuditError, match="duplicate decision"):
         parse_audit_result_json(json.dumps(payload))
@@ -174,7 +184,7 @@ def test_audit_result_rejects_unknown_fields_duplicates_and_identity_drift(
         reconcile_audit_result(bundle, parse_audit_result_json(json.dumps(payload)))
 
 
-def test_audit_result_rejects_unknown_occurrence_and_classification(
+def test_audit_result_rejects_unknown_occurrence_and_expected_disposition(
     tmp_path: Path,
 ) -> None:
     corpus, scan_result, zed_root = _audit_fixture(tmp_path)
@@ -190,8 +200,8 @@ def test_audit_result_rejects_unknown_occurrence_and_classification(
     assert isinstance(decisions, list)
     first = decisions[0]
     assert isinstance(first, dict)
-    first["classification"] = "looks-fine"
-    with pytest.raises(UnlabeledAuditError, match="invalid AuditClassification"):
+    first["expected_disposition"] = "looks-fine"
+    with pytest.raises(UnlabeledAuditError, match="invalid AuditDisposition"):
         parse_audit_result_json(json.dumps(payload))
 
     payload = _result_payload(bundle)
@@ -202,6 +212,82 @@ def test_audit_result_rejects_unknown_occurrence_and_classification(
     first["occurrence_id"] = "unknown-occurrence"
     with pytest.raises(UnlabeledAuditError, match="unknown occurrence IDs"):
         reconcile_audit_result(bundle, parse_audit_result_json(json.dumps(payload)))
+
+
+def test_audit_reconciliation_separates_completeness_from_gate_acceptability(
+    tmp_path: Path,
+) -> None:
+    corpus, scan_result, zed_root = _audit_fixture(tmp_path)
+    bundle = build_audit_bundle(
+        corpus,
+        scan_result,
+        zed_root,
+        audit_set_id=AUDIT_SET_ID,
+        sample_size=3,
+    )
+    scan_by_id = {item.occurrence_id: item for item in scan_result.occurrences}
+    expected = {
+        "covered-unlabeled": "review_required",
+        "uncovered-confirmed": "excluded",
+        "uncovered-review": "confirmed",
+    }
+    payload = _result_payload_for_dispositions(bundle, expected)
+    result = parse_audit_result_json(json.dumps(payload))
+
+    structural = reconcile_audit_result(bundle, result)
+    report = reconcile_audit_result(bundle, result, scan_result)
+
+    assert structural.is_complete
+    assert not structural.is_gate_acceptable
+    assert report.is_complete
+    assert report.is_gate_acceptable is False
+    assert report.unsafe_promotion_occurrence_ids == ("covered-unlabeled",)
+    assert report.candidate_exclusion_mismatch_occurrence_ids == (
+        "uncovered-confirmed",
+    )
+    assert report.outcome_counts[AuditOutcome.CONSERVATIVE_REVIEW] == 1
+    assert {item.occurrence_id for item in bundle.occurrences} <= set(scan_by_id)
+
+
+def test_audit_reconciliation_blocks_indeterminate_and_corpus_gap(
+    tmp_path: Path,
+) -> None:
+    corpus, scan_result, zed_root = _audit_fixture(tmp_path)
+    bundle = build_audit_bundle(
+        corpus,
+        scan_result,
+        zed_root,
+        audit_set_id=AUDIT_SET_ID,
+        sample_size=3,
+    )
+    payload = _result_payload_for_dispositions(
+        bundle,
+        {
+            "covered-unlabeled": "indeterminate",
+            "uncovered-confirmed": "confirmed",
+            "uncovered-review": "confirmed",
+        },
+    )
+    decisions = payload["decisions"]
+    assert isinstance(decisions, list)
+    for decision in decisions:
+        assert isinstance(decision, dict)
+        if decision["occurrence_id"] == "uncovered-review":
+            decision["corpus_gap"] = True
+
+    report = reconcile_audit_result(
+        bundle,
+        parse_audit_result_json(json.dumps(payload)),
+        scan_result,
+    )
+
+    assert report.is_complete
+    assert not report.is_gate_acceptable
+    assert report.indeterminate_occurrence_ids == ("covered-unlabeled",)
+    assert report.corpus_gap_occurrence_ids == ("uncovered-review",)
+    assert any(
+        "indeterminate audit decisions" in reason for reason in report.failure_reasons
+    )
 
 
 def test_unlabeled_audit_schemas_match_runtime_contracts() -> None:
@@ -350,16 +436,31 @@ def _result_payload(bundle: AuditBundle) -> dict[str, object]:
         "decisions": [
             {
                 "occurrence_id": sample.occurrence_id,
-                "classification": classification.value,
+                "corpus_gap": False,
+                "expected_disposition": disposition.value,
                 "rationale": "independent fixture assessment",
             }
-            for sample, classification in zip(
+            for sample, disposition in zip(
                 bundle.occurrences,
-                AuditClassification,
+                AuditDisposition,
                 strict=False,
             )
         ],
+        "tool_version": bundle.tool_version,
+        "rule_pack_version": bundle.rule_pack_version,
     }
+
+
+def _result_payload_for_dispositions(
+    bundle: AuditBundle, dispositions: dict[str, str]
+) -> dict[str, object]:
+    payload = _result_payload(bundle)
+    decisions = payload["decisions"]
+    assert isinstance(decisions, list)
+    for decision in decisions:
+        assert isinstance(decision, dict)
+        decision["expected_disposition"] = dispositions[decision["occurrence_id"]]
+    return payload
 
 
 def _run_git(repository: Path, *arguments: str) -> subprocess.CompletedProcess[str]:

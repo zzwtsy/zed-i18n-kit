@@ -24,7 +24,7 @@ uv run zed-i18n-kit evaluate \
   --output /tmp/zed-evaluation.json
 ```
 
-`scan` 默认发现 `crates/*/src/**/*.rs` 下的生产 Rust 文件，排除测试、examples、benches、fixtures、component preview 和生成路径，并且只读取输入 checkout。扫描器使用作用域化 `use`/alias 候选解析和 typed builtin rules；显式唯一解析可以自动分类，条件导入、通配符、父模块重导出或未知 receiver 保守进入审核，普通对象的同名 `.child()` 不会作为 GPUI sink。`evaluate` 会重新核对 commit 和扫描范围内每个文件的 SHA-256；corpus 未覆盖的 workspace occurrence 进入 unlabeled 审计，不会伪装成金标错误。评估报告标记为 `prototype-observational-v1`，其中 `observational_metrics` 与 `independently_reviewed_metrics` 明确分离，不能直接作为阶段 1C 自动确认门禁。
+`scan` 默认发现 `crates/*/src/**/*.rs` 下的生产 Rust 文件，排除测试、examples、benches、fixtures、component preview 和生成路径，并且只读取输入 checkout。扫描器使用作用域化 `use`/alias 候选解析和 typed builtin rules；显式唯一解析可以自动分类，条件导入、通配符、父模块重导出或未知 receiver 保守进入审核，普通对象的同名 `.child()` 不会作为 GPUI sink。配置 hash 同时绑定 child 的 element-binding 过滤、纯格式控制字面量排除、`detach_and_prompt_err` 的主消息与 closure `Some` payload 提取、`Tooltip::simple`/`Tooltip::with_meta` 的文本槽位、`Label::new(...).inline_code(...)` 排除语义，以及 `documentation_aside` callback 内独立 long-option token 的上下文排除；普通字符串不会按 `git ` 前缀作全局排除。这些行为变化必须重新生成 scan 并更新冻结 policy 身份。`evaluate` 会重新核对 commit 和扫描范围内每个文件的 SHA-256；corpus 未覆盖的 workspace occurrence 进入 unlabeled 审计，不会伪装成金标错误。评估报告标记为 `prototype-observational-v1`，其中 `observational_metrics` 与 `independently_reviewed_metrics` 明确分离，不能直接作为阶段 1C 自动确认门禁。当前 CST 实现不能安全自动排除跨 helper/callback 的协议、用户和错误来源；在最小 HIR 来源解析落地前，这些 finding 必须保持失败，不能改用变量名或路径启发式绕过。
 
 阶段 1C 独立审核与冻结门禁：
 
@@ -47,7 +47,9 @@ uv run zed-i18n-kit freeze-check \
   --corpus corpus/zed-ui-text/v2 \
   --scan-result /tmp/zed-scan.json \
   --zed local/zed \
-  --review-result /tmp/zed-review-result.json
+  --review-result /tmp/zed-review-result.json \
+  --audit-bundle /tmp/zed-unlabeled-audit-bundle.json \
+  --audit-result /tmp/zed-unlabeled-audit-result.json
 
 # 从 corpus 外发现中优先抽取新路径，并按 rule/disposition/risk 轮询分层
 uv run zed-i18n-kit audit-export \
@@ -59,11 +61,12 @@ uv run zed-i18n-kit audit-export \
   --output /tmp/zed-unlabeled-audit-bundle.json
 
 uv run zed-i18n-kit audit-check \
+  --scan-result /tmp/zed-scan.json \
   --audit-bundle /tmp/zed-unlabeled-audit-bundle.json \
   --audit-result /tmp/zed-unlabeled-audit-result.json
 ```
 
-`review-check` 在 disputed 或 missing 时返回非零；`audit-check` 在审核不完整时返回非零。`freeze-check` 没有审核结果、分母/分层不足、identity 漂移、未允许的 capability failure、unmatched、ambiguous、disagreement 或指标不达标时均返回非零，并输出 `freeze_status=reviewing`。工具只校验 reviewer ID 非空，不能替代组织层面的独立性确认，也不会自动生成审核结论。
+`review-check` 在 disputed 或 missing 时返回非零；`audit-check` 会同时校验 bundle/result 结构完整性、tool/rule/commit/corpus/config 身份及 occurrence disposition 对账，在 missing、indeterminate、corpus gap、安全错判或 candidate/excluded 错判时返回非零。`freeze-check` 必须同时提供完整的 corpus review 与 workspace holdout audit；两者都缺失时输出正常 `freeze_status=reviewing` 报告并返回 1，只给其中一个 audit 参数是非法调用并返回 2。其余分母/分层不足、identity 漂移、未允许的 capability failure、unmatched、ambiguous、disagreement 或指标不达标时均返回非零并保持 `reviewing`。工具只校验 reviewer ID 非空，不能替代组织层面的独立性确认，也不会自动生成审核结论。
 
 ## 2. 统一质量门禁
 

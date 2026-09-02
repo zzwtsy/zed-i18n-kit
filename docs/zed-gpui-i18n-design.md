@@ -56,7 +56,7 @@ UI 文本候选 IR
 
 `zed-i18n-kit` 当前已完成阶段 0、阶段 0.5、阶段 1A 和阶段 1B：针对固定 Zed commit 建立了唯一的 corpus v2，共 266 条版本化 UI 文本参考样本；Tree-sitter Rust 使用 16 条风险样本校准 CST 与 canonical span，并建立严格、确定性的 `scan-result-v1`、snapshot 校验、评估报告和只读 CLI。Persistent inventory、规则冻结、运行时和 Overlay 尚未实现。`local/zed` 是一个独立且完整的 Zed Rust workspace，并通过当前仓库的 `.gitignore` 排除。
 
-阶段 1A 已确认 occurrence、sink、所有权和源码作用域必须共同参与判断，并闭合 canonical CST span、nullable origin constraint、corpus 外发现和 auto-confirm coverage 的协议语义。阶段 1B 默认 discovery 覆盖 `crates/*/src/**/*.rs` 的生产文件，并增加作用域化 import/alias 候选解析、9 条 typed builtin rules、receiver 证据和函数内保守 provenance；固定 10 文件 profile 继续承担协议回归。通配符、父模块重导出、未知 receiver 和复杂传播不会伪装成精确语义。266 条样本均未独立复核，当前结果只是阶段 1C 的工作输入，不是质量门禁通过声明。
+阶段 1A 已确认 occurrence、sink、所有权和源码作用域必须共同参与判断，并闭合 canonical CST span、nullable origin constraint、corpus 外发现和 auto-confirm coverage 的协议语义。阶段 1B 默认 discovery 覆盖 `crates/*/src/**/*.rs` 的生产文件，并增加作用域化 import/alias 候选解析、15 条 typed builtin rules、2 条结构化 origin rules、receiver 证据和函数内保守 provenance；固定 10 文件 profile 继续承担协议回归。通配符、父模块重导出、未知 receiver 和复杂传播不会伪装成精确语义。266 条样本均未独立复核，当前结果只是阶段 1C 的工作输入，不是质量门禁通过声明。
 
 这意味着系统应划分为持久资产、外部输入和派生工作区三个边界：
 
@@ -252,7 +252,7 @@ Tree-sitter 和规则系统无法可靠解决以下问题时，可以增加一�
 - 跨函数调用关系；
 - 宏展开后的调用结构。
 
-该 sidecar 可以基于 rust-analyzer/HIR，但不应成为 MVP 的硬依赖。只有在金标数据证明基础方案的误报或漏报无法接受时再引入，以避免过早承担大型 workspace 分析、宏、`cfg` 和版本耦合成本。
+该 sidecar 可以基于 rust-analyzer/HIR，但不应在没有证据时成为 MVP 的硬依赖。阶段 1C 的 r2 独立审计已经给出触发证据：CST 无法安全区分协议字段、用户路径、错误 display 与产品自有动态字段，并形成 `7/47` exclusion leakage。阶段 1C-B 因而只提前实现类型/字段来源、跨 helper/callback 返回来源以及 sink/origin 分离所需的最小 HIR 能力；大型 workspace 分析的其余范围仍按证据增量引入。
 
 ### 4.5 版本快照与能力探测
 
@@ -691,7 +691,7 @@ Tree-sitter 后端及已知 grammar 限制记录在 [ADR 0006](decisions/0006-tr
 - 使用阶段 1A 协议输出确定性、版本化的 scan-result；
 - 不生成目录，不改写源码。
 
-阶段 1B 已完成：默认 CLI 发现生产 `src/**/*.rs`，执行路径排除和越界符号链接保护；作用域化 `use`、alias、本地声明和 `cfg(test)` 参与候选符号解析；首批 typed builtin rules 覆盖 GPUI component、Prompt、Notification、ARIA 和 receiver 可证明的 `.child()`；函数内 provenance 跟踪简单绑定、分支、重赋值、`format!` 和 `push_str`。阶段 1A fixed profile 保持独立。Tree-sitter token tree、跨文件重导出和完整 Rust 类型推导仍保守降级或成为显式覆盖缺口，阶段 1C 必须先独立审核才能冻结自动确认规则。
+阶段 1B 已完成：默认 CLI 发现生产 `src/**/*.rs`，执行路径排除和越界符号链接保护；作用域化 `use`、alias、本地声明和 `cfg(test)` 参与候选符号解析；typed builtin rules 覆盖 GPUI component、Prompt、Notification、ARIA、Tooltip 以及 receiver 可证明的 `.child()`，结构化 origin rules 覆盖 Toast message 和 `SharedString` 错误返回；函数内 provenance 跟踪简单绑定、分支、重赋值、`format!` 和 `push_str`。`Tooltip::simple` 的首参数按独立 sink 槽位处理；只有 `documentation_aside` callback 中带独立 long-option token 的 `Label` 才按命令选项排除，普通上下文中的相同文本仍保留为产品文本。阶段 1A fixed profile 保持独立。Tree-sitter token tree、跨文件重导出和完整 Rust 类型推导仍保守降级或成为显式覆盖缺口，阶段 1C 必须先独立审核才能冻结自动确认规则。
 
 ### 阶段 1C：规则冻结与独立审计
 
@@ -701,7 +701,9 @@ Tree-sitter 后端及已知 grammar 限制记录在 [ADR 0006](decisions/0006-tr
 - 固定首批允许自动确认的规则、tested commits 和 capability probes；
 - 量化 Tree-sitter 在 receiver、宏、helper 和跨函数语义上的缺口，再决定是否评估 rust-analyzer sidecar。
 
-阶段 1C 的审核基础设施已落地：corpus blind bundle 与 unlabeled audit bundle 都不暴露扫描预测，外部结果使用严格版本化 schema 并绑定 commit/corpus/config，`zed-builtin-v1` policy 固定 9 条规则和 capability probes。冻结报告重新验证完整 scan snapshot，并同时检查最小样本、分母、关键 strata、precision/coverage/recall 和安全错误类别。当前没有真实独立审核结果，baseline 必须输出 `reviewing`，这表示基础设施可用但规则尚未冻结。
+阶段 1C-A 的审核基础设施已落地：corpus blind bundle 与 workspace holdout audit bundle 都不暴露扫描预测，外部结果使用严格版本化 schema 并绑定 commit/corpus/config/tool/rule，`zed-builtin-v1` policy 固定 15 条 typed sink rules、2 条结构化 origin rules、capability probes 和 audit set。冻结报告重新验证完整 scan snapshot，先核验 audit bundle/result 身份，再按 occurrence ID 对账实际 scanner disposition，并同时检查 corpus review 与 holdout audit 的最小样本、分母、关键 strata、precision/coverage/recall 和安全错误类别。当前没有可用于最终冻结的独立审核结果；没有双证据或证据失败时必须输出 `reviewing`。
+
+r2 全量 corpus review 和 100 条 holdout audit 均已真实执行但未通过：corpus 有 20 条分歧，holdout 有 10 条 candidate/excluded mismatch。受控 CST 修复已消除 element-producing `match` 误报，并把纯格式控制字面量降为 excluded；corpus 裁决后仍有 7 条外部 ownership fixture 泄漏为 `review_required`。该结果使阶段 1C-B 保持 blocked，并按 ADR 0007 将最小 rust-analyzer/HIR 来源解析提前到本阶段；r2 结果不得复用为最终证据，r3 全量 review 与新 holdout 只能在 leakage 归零后生成。
 
 ### 阶段 2：持久 inventory 与版本对账
 
@@ -843,4 +845,4 @@ Tree-sitter 后端及已知 grammar 限制记录在 [ADR 0006](decisions/0006-tr
 
 在上述闭环建立前，不应批量替换整个 Zed workspace，不应维护长期修改分支，不应把旧 patch 当作新版输入，不应把 runtime 字符串拦截当作生产翻译方案，也不应把完整 rust-analyzer/HIR 集成作为第一阶段前置条件。
 
-当前主攻方向是阶段 1B 的 discovery、作用域和 typed rule 扩展，而不是提前实现 Overlay、runtime 或完整 HIR 后端。阶段 1A 已固定 canonical span、snapshot 和匹配分类；但现有指标仍只有探索意义，必须等阶段 1C 建立独立复核子集、审计 unlabeled occurrence 并确定 precision/coverage 门禁后，才能冻结自动确认规则。
+当前主攻方向是阶段 1C-B 的最小 HIR 来源解析，目标是解决独立审计确认的 external ownership 与 sink/origin 分离缺口；不是阶段 2 inventory，也不是 Overlay、runtime 或完整通用 HIR 后端。只有 exclusion leakage 归零并重新完成 r3 全量 review 与新 holdout audit 后，才能冻结自动确认规则并把主攻方向转向阶段 2。

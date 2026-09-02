@@ -1,9 +1,10 @@
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 
 from zed_i18n_kit.rust_cst import iter_named_nodes, parse_rust_cst
 from zed_i18n_kit.rust_symbols import (
     ImportBinding,
     SymbolResolutionKind,
+    build_controlled_export_index,
     build_source_symbol_table,
 )
 
@@ -128,3 +129,54 @@ fn render() { Label::new("Domain value"); }
     call = next(iter_named_nodes(tree.root, node_type="call_expression"))
 
     assert table.resolve_target("Label::new", "ui::Label::new", at=call) is None
+
+
+def test_controlled_export_index_only_upgrades_a_unique_target(
+    tmp_path: Path,
+) -> None:
+    ui_prelude = tmp_path / "crates/ui/src/prelude.rs"
+    gpui_prelude = tmp_path / "crates/gpui/src/prelude.rs"
+    ui_prelude.parent.mkdir(parents=True)
+    gpui_prelude.parent.mkdir(parents=True)
+    ui_prelude.write_text(
+        "pub use crate::Label;\npub use alternate::Label;\n",
+        encoding="utf-8",
+    )
+    gpui_prelude.write_text("pub use crate::div;\n", encoding="utf-8")
+    export_index = build_controlled_export_index(tmp_path)
+    source = b'use ui::prelude::*; fn render() { Label::new("text"); }'
+    tree = parse_rust_cst(source)
+    table = build_source_symbol_table(
+        tree,
+        PurePosixPath("crates/demo/src/lib.rs"),
+        export_index=export_index,
+    )
+    call = next(iter_named_nodes(tree.root, node_type="call_expression"))
+
+    resolution = table.resolve_target("Label::new", "ui::Label::new", at=call)
+
+    assert resolution is not None
+    assert resolution.kind is SymbolResolutionKind.CANDIDATE
+
+
+def test_controlled_export_index_upgrades_one_explicit_export(tmp_path: Path) -> None:
+    ui_prelude = tmp_path / "crates/ui/src/prelude.rs"
+    gpui_prelude = tmp_path / "crates/gpui/src/prelude.rs"
+    ui_prelude.parent.mkdir(parents=True)
+    gpui_prelude.parent.mkdir(parents=True)
+    ui_prelude.write_text("pub use crate::Label;\n", encoding="utf-8")
+    gpui_prelude.write_text("pub use crate::div;\n", encoding="utf-8")
+    export_index = build_controlled_export_index(tmp_path)
+    source = b'use ui::prelude::*; fn render() { Label::new("text"); }'
+    tree = parse_rust_cst(source)
+    table = build_source_symbol_table(
+        tree,
+        PurePosixPath("crates/demo/src/lib.rs"),
+        export_index=export_index,
+    )
+    call = next(iter_named_nodes(tree.root, node_type="call_expression"))
+
+    resolution = table.resolve_target("Label::new", "ui::Label::new", at=call)
+
+    assert resolution is not None
+    assert resolution.kind is SymbolResolutionKind.EXACT

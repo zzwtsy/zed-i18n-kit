@@ -16,9 +16,17 @@ from .evaluation import (
 )
 from .golden import GoldenCorpus, GoldenSample, ReviewState
 from .review import ReviewError, ReviewResult, reconcile_review_result
-from .scan_profiles import WORKSPACE_BUILTIN_RULES
+from .scan_profiles import WORKSPACE_BUILTIN_RULES, WORKSPACE_STRUCTURAL_RULE_IDS
 from .scan_result import CapabilityProbeStatus, ScanResult, validate_scan_result
 from .schema_resources import SchemaResource
+from .unlabeled_audit import (
+    AuditBundle,
+    AuditDisposition,
+    AuditOutcome,
+    AuditResult,
+    UnlabeledAuditError,
+    reconcile_audit_result,
+)
 
 FREEZE_POLICY_SCHEMA_VERSION = 1
 DEFAULT_FREEZE_POLICY_NAME = "zed-builtin-v1.freeze-policy.json"
@@ -35,6 +43,7 @@ POLICY_FIELDS = frozenset(
     {
         "schema_version",
         "review_set_id",
+        "audit_set_id",
         "zed_commit",
         "corpus_sample_sha256",
         "tool_version",
@@ -44,11 +53,16 @@ POLICY_FIELDS = frozenset(
         "required_passed_probes",
         "allowed_failed_probes",
         "minimum_reviewed_samples",
+        "minimum_audited_samples",
         "strata",
         "metrics",
         "maximum_unmatched_samples",
         "maximum_ambiguous_samples",
         "maximum_disputed_samples",
+        "maximum_corpus_gaps",
+        "maximum_indeterminate",
+        "maximum_unsafe_promotions",
+        "maximum_candidate_exclusion_mismatches",
     }
 )
 METRIC_POLICY_FIELDS = frozenset({"minimum_denominator", "minimum", "maximum"})
@@ -79,6 +93,7 @@ class StratumPolicy:
 @dataclass(frozen=True, slots=True)
 class FreezePolicy:
     review_set_id: str
+    audit_set_id: str
     zed_commit: str
     corpus_sample_sha256: str
     tool_version: str
@@ -88,11 +103,16 @@ class FreezePolicy:
     required_passed_probes: tuple[str, ...]
     allowed_failed_probes: tuple[str, ...]
     minimum_reviewed_samples: int
+    minimum_audited_samples: int
     strata: tuple[StratumPolicy, ...]
     metrics: Mapping[str, MetricPolicy]
     maximum_unmatched_samples: int
     maximum_ambiguous_samples: int
     maximum_disputed_samples: int
+    maximum_corpus_gaps: int
+    maximum_indeterminate: int
+    maximum_unsafe_promotions: int
+    maximum_candidate_exclusion_mismatches: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,6 +131,21 @@ class FreezeGateReport:
     stratum_counts: Mapping[tuple[str, str], int]
     metrics: EvaluationMetrics
     failures: tuple[str, ...]
+    audit_set_id: str
+    audit_reviewer_id: str | None
+    audit_sample_count: int
+    audit_decision_count: int
+    missing_audit_sample_count: int
+    audit_expected_disposition_counts: Mapping[AuditDisposition, int]
+    audit_outcome_counts: Mapping[AuditOutcome, int]
+
+    @property
+    def audited_sample_count(self) -> int:
+        return self.audit_decision_count
+
+    @property
+    def audit_missing_sample_count(self) -> int:
+        return self.missing_audit_sample_count
 
     @property
     def passed(self) -> bool:
@@ -144,6 +179,9 @@ def load_freeze_policy(path: SchemaResource) -> FreezePolicy:
     review_set_id = _require_string(raw, "review_set_id", str(path))
     if not _valid_review_set_id(review_set_id):
         raise FreezeGateError(f"{path}: invalid review_set_id {review_set_id!r}")
+    audit_set_id = _require_string(raw, "audit_set_id", str(path))
+    if not _valid_review_set_id(audit_set_id):
+        raise FreezeGateError(f"{path}: invalid audit_set_id {audit_set_id!r}")
     required_passed = _require_string_tuple(raw, "required_passed_probes", str(path))
     allowed_failed = _require_string_tuple(raw, "allowed_failed_probes", str(path))
     overlap = set(required_passed) & set(allowed_failed)
@@ -188,6 +226,7 @@ def load_freeze_policy(path: SchemaResource) -> FreezePolicy:
 
     return FreezePolicy(
         review_set_id=review_set_id,
+        audit_set_id=audit_set_id,
         zed_commit=_require_lower_hex(raw, "zed_commit", 40, str(path)),
         corpus_sample_sha256=_require_lower_hex(
             raw, "corpus_sample_sha256", 64, str(path)
@@ -201,6 +240,9 @@ def load_freeze_policy(path: SchemaResource) -> FreezePolicy:
         minimum_reviewed_samples=_require_int(
             raw, "minimum_reviewed_samples", str(path), minimum=1
         ),
+        minimum_audited_samples=_require_int(
+            raw, "minimum_audited_samples", str(path), minimum=1
+        ),
         strata=tuple(strata),
         metrics=metrics,
         maximum_unmatched_samples=_require_int(
@@ -212,6 +254,18 @@ def load_freeze_policy(path: SchemaResource) -> FreezePolicy:
         maximum_disputed_samples=_require_int(
             raw, "maximum_disputed_samples", str(path), minimum=0
         ),
+        maximum_corpus_gaps=_require_int(
+            raw, "maximum_corpus_gaps", str(path), minimum=0
+        ),
+        maximum_indeterminate=_require_int(
+            raw, "maximum_indeterminate", str(path), minimum=0
+        ),
+        maximum_unsafe_promotions=_require_int(
+            raw, "maximum_unsafe_promotions", str(path), minimum=0
+        ),
+        maximum_candidate_exclusion_mismatches=_require_int(
+            raw, "maximum_candidate_exclusion_mismatches", str(path), minimum=0
+        ),
     )
 
 
@@ -220,11 +274,92 @@ def evaluate_freeze_gate(
     scan_result: ScanResult,
     policy: FreezePolicy,
     review_result: ReviewResult | None,
+    audit_bundle: AuditBundle | None = None,
+    audit_result: AuditResult | None = None,
 ) -> FreezeGateReport:
     validate_scan_result(scan_result)
     failures: list[str] = []
     _check_identity(corpus, scan_result, policy, failures)
     _check_capabilities(scan_result, policy, failures)
+
+    audit_set_id = policy.audit_set_id
+    audit_reviewer_id: str | None = None
+    audit_sample_count = 0
+    audit_decision_count = 0
+    missing_audit_sample_count = 0
+    audit_expected_disposition_counts: Mapping[AuditDisposition, int] = {
+        disposition: 0 for disposition in AuditDisposition
+    }
+    audit_outcome_counts: Mapping[AuditOutcome, int] = {
+        outcome: 0 for outcome in AuditOutcome
+    }
+    if audit_bundle is None or audit_result is None:
+        failures.append("independent unlabeled audit bundle and result are required")
+    else:
+        audit_reviewer_id = audit_result.reviewer_id
+        audit_sample_count = len(audit_bundle.occurrences)
+        audit_decision_count = len(audit_result.decisions)
+        if _check_audit_identity(
+            scan_result, policy, audit_bundle, audit_result, failures
+        ):
+            try:
+                audit_reconciliation = reconcile_audit_result(
+                    audit_bundle, audit_result, scan_result
+                )
+            except UnlabeledAuditError as error:
+                failures.append(f"audit evidence is invalid: {error}")
+            else:
+                missing_audit_sample_count = len(
+                    audit_reconciliation.missing_occurrence_ids
+                )
+                audit_outcome_counts = audit_reconciliation.outcome_counts
+                audit_expected_disposition_counts = (
+                    audit_reconciliation.expected_disposition_counts
+                )
+                failures.extend(audit_reconciliation.structural_failure_reasons)
+                if (
+                    len(audit_reconciliation.corpus_gap_occurrence_ids)
+                    > policy.maximum_corpus_gaps
+                ):
+                    failures.append(
+                        "corpus gap count exceeds maximum: "
+                        f"{len(audit_reconciliation.corpus_gap_occurrence_ids)} > "
+                        f"{policy.maximum_corpus_gaps}"
+                    )
+                if (
+                    len(audit_reconciliation.indeterminate_occurrence_ids)
+                    > policy.maximum_indeterminate
+                ):
+                    failures.append(
+                        "indeterminate audit count exceeds maximum: "
+                        f"{len(audit_reconciliation.indeterminate_occurrence_ids)} > "
+                        f"{policy.maximum_indeterminate}"
+                    )
+                if (
+                    len(audit_reconciliation.unsafe_promotion_occurrence_ids)
+                    > policy.maximum_unsafe_promotions
+                ):
+                    failures.append(
+                        "unsafe promotion count exceeds maximum: "
+                        f"{len(audit_reconciliation.unsafe_promotion_occurrence_ids)} > "
+                        f"{policy.maximum_unsafe_promotions}"
+                    )
+                if (
+                    len(
+                        audit_reconciliation.candidate_exclusion_mismatch_occurrence_ids
+                    )
+                    > policy.maximum_candidate_exclusion_mismatches
+                ):
+                    failures.append(
+                        "candidate/excluded mismatch count exceeds maximum: "
+                        f"{len(audit_reconciliation.candidate_exclusion_mismatch_occurrence_ids)} > "
+                        f"{policy.maximum_candidate_exclusion_mismatches}"
+                    )
+    if audit_sample_count < policy.minimum_audited_samples:
+        failures.append(
+            "audited sample count below minimum: "
+            f"{audit_sample_count} < {policy.minimum_audited_samples}"
+        )
 
     reviewer_id: str | None = None
     agreed_ids: tuple[str, ...] = ()
@@ -324,11 +459,57 @@ def evaluate_freeze_gate(
         stratum_counts=dict(stratum_counts),
         metrics=metrics,
         failures=tuple(failures),
+        audit_set_id=audit_set_id,
+        audit_reviewer_id=audit_reviewer_id,
+        audit_sample_count=audit_sample_count,
+        audit_decision_count=audit_decision_count,
+        missing_audit_sample_count=missing_audit_sample_count,
+        audit_expected_disposition_counts=audit_expected_disposition_counts,
+        audit_outcome_counts=audit_outcome_counts,
     )
 
 
 def serialize_freeze_gate_report(report: FreezeGateReport, policy: FreezePolicy) -> str:
     payload = {
+        "audit": {
+            "audit_set_id": report.audit_set_id,
+            "decision_count": report.audit_decision_count,
+            "minimum_sample_count": policy.minimum_audited_samples,
+            "expected_disposition_counts": {
+                disposition.value: report.audit_expected_disposition_counts.get(
+                    disposition, 0
+                )
+                for disposition in AuditDisposition
+            },
+            "outcome_counts": {
+                outcome.value: report.audit_outcome_counts.get(outcome, 0)
+                for outcome in AuditOutcome
+            },
+            "reviewer_id": report.audit_reviewer_id,
+            "sample_count": report.audit_sample_count,
+            "missing_sample_count": report.missing_audit_sample_count,
+            "maximum_corpus_gaps": policy.maximum_corpus_gaps,
+            "maximum_indeterminate": policy.maximum_indeterminate,
+            "maximum_unsafe_promotions": policy.maximum_unsafe_promotions,
+            "maximum_candidate_exclusion_mismatches": (
+                policy.maximum_candidate_exclusion_mismatches
+            ),
+        },
+        "audit_decision_count": report.audit_decision_count,
+        "audited_sample_count": report.audited_sample_count,
+        "audit_expected_disposition_counts": {
+            disposition.value: report.audit_expected_disposition_counts.get(
+                disposition, 0
+            )
+            for disposition in AuditDisposition
+        },
+        "audit_outcome_counts": {
+            outcome.value: report.audit_outcome_counts.get(outcome, 0)
+            for outcome in AuditOutcome
+        },
+        "audit_reviewer_id": report.audit_reviewer_id,
+        "audit_sample_count": report.audit_sample_count,
+        "audit_set_id": report.audit_set_id,
         "capability_probes": [
             {
                 "probe_id": probe_id,
@@ -345,6 +526,7 @@ def serialize_freeze_gate_report(report: FreezeGateReport, policy: FreezePolicy)
         "corpus_sample_sha256": report.corpus_sample_sha256,
         "disputed_sample_count": report.disputed_sample_count,
         "failures": list(report.failures),
+        "failure_reasons": list(report.failures),
         "freeze_status": report.freeze_status,
         "metrics": {
             name: {
@@ -358,6 +540,7 @@ def serialize_freeze_gate_report(report: FreezeGateReport, policy: FreezePolicy)
             for name in sorted(METRIC_NAMES)
         },
         "missing_sample_count": report.missing_sample_count,
+        "missing_audit_sample_count": report.missing_audit_sample_count,
         "passed": report.passed,
         "review_set_id": report.review_set_id,
         "reviewed_sample_count": report.reviewed_sample_count,
@@ -379,6 +562,79 @@ def serialize_freeze_gate_report(report: FreezeGateReport, policy: FreezePolicy)
         "zed_commit": report.zed_commit,
     }
     return json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+
+
+def _check_audit_identity(
+    scan_result: ScanResult,
+    policy: FreezePolicy,
+    bundle: AuditBundle,
+    result: AuditResult,
+    failures: list[str],
+) -> bool:
+    identity_valid = True
+    artifact_checks = (
+        ("audit set", policy.audit_set_id, bundle.audit_set_id, result.audit_set_id),
+        ("Zed commit", policy.zed_commit, bundle.zed_commit, result.zed_commit),
+        (
+            "corpus sample SHA-256",
+            policy.corpus_sample_sha256,
+            bundle.corpus_sample_sha256,
+            result.corpus_sample_sha256,
+        ),
+        (
+            "scan config hash",
+            policy.config_hash,
+            bundle.scan_config_hash,
+            result.scan_config_hash,
+        ),
+        (
+            "tool version",
+            policy.tool_version,
+            bundle.tool_version,
+            result.tool_version,
+        ),
+        (
+            "rule pack version",
+            policy.rule_pack_version,
+            bundle.rule_pack_version,
+            result.rule_pack_version,
+        ),
+    )
+    for label, expected, bundle_value, result_value in artifact_checks:
+        if bundle_value != expected:
+            identity_valid = False
+            failures.append(
+                f"audit bundle {label} mismatch: expected {expected}, got {bundle_value}"
+            )
+        if result_value != expected:
+            identity_valid = False
+            failures.append(
+                f"audit result {label} mismatch: expected {expected}, got {result_value}"
+            )
+        if bundle_value != result_value:
+            identity_valid = False
+            failures.append(
+                f"audit bundle/result {label} mismatch: "
+                f"{bundle_value} != {result_value}"
+            )
+
+    scan_checks = (
+        ("Zed commit", policy.zed_commit, scan_result.metadata.zed_commit),
+        ("scan config hash", policy.config_hash, scan_result.metadata.config_hash),
+        ("tool version", policy.tool_version, scan_result.metadata.tool_version),
+        (
+            "rule pack version",
+            policy.rule_pack_version,
+            scan_result.metadata.rule_pack_version,
+        ),
+    )
+    for label, expected, actual in scan_checks:
+        if actual != expected:
+            identity_valid = False
+            failures.append(
+                f"scan-result {label} mismatch: expected {expected}, got {actual}"
+            )
+    return identity_valid
 
 
 def _check_identity(
@@ -408,7 +664,14 @@ def _check_identity(
         if actual != expected:
             failures.append(f"{label} mismatch: expected {expected}, got {actual}")
 
-    runtime_rule_ids = tuple(sorted(rule.rule_id for rule in WORKSPACE_BUILTIN_RULES))
+    runtime_rule_ids = tuple(
+        sorted(
+            (
+                *(rule.rule_id for rule in WORKSPACE_BUILTIN_RULES),
+                *WORKSPACE_STRUCTURAL_RULE_IDS,
+            )
+        )
+    )
     if tuple(sorted(policy.rule_ids)) != runtime_rule_ids:
         failures.append("policy rule IDs differ from the runtime workspace profile")
     evidence_rule_ids = {

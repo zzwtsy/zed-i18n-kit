@@ -10,6 +10,8 @@
     "zed_commit",
     "corpus_sample_sha256",
     "scan_config_hash",
+    "tool_version",
+    "rule_pack_version",
     "reviewer_id",
     "decisions"
   ],
@@ -28,23 +30,31 @@
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"
     },
+    "tool_version": { "type": "string", "minLength": 1 },
+    "rule_pack_version": { "type": "string", "minLength": 1 },
     "reviewer_id": { "type": "string", "minLength": 1 },
     "decisions": {
       "type": "array",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["occurrence_id", "classification", "rationale"],
+        "required": [
+          "occurrence_id",
+          "expected_disposition",
+          "corpus_gap",
+          "rationale"
+        ],
         "properties": {
           "occurrence_id": { "type": "string", "minLength": 1 },
-          "classification": {
+          "expected_disposition": {
             "enum": [
-              "legitimate_candidate",
-              "false_positive",
-              "corpus_gap",
+              "confirmed",
+              "review_required",
+              "excluded",
               "indeterminate"
             ]
           },
+          "corpus_gap": { "type": "boolean" },
           "rationale": { "type": "string", "minLength": 1 }
         }
       }

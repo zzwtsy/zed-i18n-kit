@@ -28,16 +28,16 @@ def test_repository_corpus_has_baseline_and_risk_boundaries() -> None:
     assert corpus.manifest.zed_commit == "2551721adb5b5187bc27cfae0fbe47f0ed4c5397"
     assert len(corpus.samples) == 266
     assert corpus.counts()["expected_disposition"] == {
-        "confirmed": 145,
-        "review_required": 57,
-        "excluded": 64,
+        "confirmed": 149,
+        "review_required": 46,
+        "excluded": 71,
     }
     assert corpus.counts()["expected_presence"] == {
-        "candidate": 202,
-        "not_candidate": 64,
+        "candidate": 195,
+        "not_candidate": 71,
     }
     assert corpus.counts()["ownership"]["user"] == 2
-    assert corpus.counts()["ownership"]["protocol"] == 3
+    assert corpus.counts()["ownership"]["protocol"] == 12
     assert corpus.counts()["feature"]["concatenation"] == 2
 
     samples = {sample.sample_id: sample for sample in corpus.samples}

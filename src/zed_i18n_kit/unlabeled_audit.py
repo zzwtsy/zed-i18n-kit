@@ -12,7 +12,7 @@ from enum import StrEnum
 from pathlib import Path, PurePosixPath
 
 from .evaluation import evaluate_scan_result
-from .golden import GoldenCorpus, SourceSpan, validate_checkout
+from .golden import Decision, GoldenCorpus, SourceSpan, validate_checkout
 from .review import context_span_for_source
 from .scan_result import ScanOccurrence, ScanResult, validate_scan_snapshot
 from .schema_resources import SchemaResource
@@ -27,6 +27,7 @@ AUDIT_BUNDLE_FIELDS = frozenset(
         "zed_commit",
         "corpus_sample_sha256",
         "scan_config_hash",
+        "tool_version",
         "rule_pack_version",
         "sample_size_requested",
         "occurrences",
@@ -49,20 +50,33 @@ AUDIT_RESULT_FIELDS = frozenset(
         "zed_commit",
         "corpus_sample_sha256",
         "scan_config_hash",
+        "tool_version",
+        "rule_pack_version",
         "reviewer_id",
         "decisions",
     }
 )
-AUDIT_DECISION_FIELDS = frozenset({"occurrence_id", "classification", "rationale"})
+AUDIT_DECISION_FIELDS = frozenset(
+    {"occurrence_id", "expected_disposition", "corpus_gap", "rationale"}
+)
 
 
 class UnlabeledAuditError(ValueError):
     """Raised when an unlabeled occurrence audit violates its protocol."""
 
 
-class AuditClassification(StrEnum):
-    LEGITIMATE_CANDIDATE = "legitimate_candidate"
-    FALSE_POSITIVE = "false_positive"
+class AuditDisposition(StrEnum):
+    CONFIRMED = "confirmed"
+    REVIEW_REQUIRED = "review_required"
+    EXCLUDED = "excluded"
+    INDETERMINATE = "indeterminate"
+
+
+class AuditOutcome(StrEnum):
+    AGREEMENT = "agreement"
+    CONSERVATIVE_REVIEW = "conservative_review"
+    UNSAFE_PROMOTION = "unsafe_promotion"
+    CANDIDATE_EXCLUSION_MISMATCH = "candidate_exclusion_mismatch"
     CORPUS_GAP = "corpus_gap"
     INDETERMINATE = "indeterminate"
 
@@ -83,6 +97,7 @@ class AuditBundle:
     zed_commit: str
     corpus_sample_sha256: str
     scan_config_hash: str
+    tool_version: str
     rule_pack_version: str
     sample_size_requested: int
     occurrences: tuple[AuditSample, ...]
@@ -91,7 +106,8 @@ class AuditBundle:
 @dataclass(frozen=True, slots=True)
 class AuditDecision:
     occurrence_id: str
-    classification: AuditClassification
+    expected_disposition: AuditDisposition
+    corpus_gap: bool
     rationale: str
 
 
@@ -101,6 +117,8 @@ class AuditResult:
     zed_commit: str
     corpus_sample_sha256: str
     scan_config_hash: str
+    tool_version: str
+    rule_pack_version: str
     reviewer_id: str
     decisions: tuple[AuditDecision, ...]
 
@@ -109,12 +127,67 @@ class AuditResult:
 class AuditReconciliation:
     audit_set_id: str
     reviewer_id: str
-    classification_counts: Mapping[AuditClassification, int]
+    expected_disposition_counts: Mapping[AuditDisposition, int]
+    outcome_counts: Mapping[AuditOutcome, int]
     missing_occurrence_ids: tuple[str, ...]
+    corpus_gap_occurrence_ids: tuple[str, ...]
+    indeterminate_occurrence_ids: tuple[str, ...]
+    unsafe_promotion_occurrence_ids: tuple[str, ...]
+    candidate_exclusion_mismatch_occurrence_ids: tuple[str, ...]
+    scan_result_available: bool
 
     @property
     def is_complete(self) -> bool:
         return not self.missing_occurrence_ids
+
+    @property
+    def structurally_complete(self) -> bool:
+        return self.is_complete
+
+    @property
+    def is_gate_acceptable(self) -> bool:
+        return (
+            self.scan_result_available
+            and self.is_complete
+            and not self.corpus_gap_occurrence_ids
+            and not self.indeterminate_occurrence_ids
+            and not self.unsafe_promotion_occurrence_ids
+            and not self.candidate_exclusion_mismatch_occurrence_ids
+        )
+
+    @property
+    def failure_reasons(self) -> tuple[str, ...]:
+        failures = list(self.structural_failure_reasons)
+        if self.corpus_gap_occurrence_ids:
+            failures.append("corpus gaps: " + ",".join(self.corpus_gap_occurrence_ids))
+        if self.indeterminate_occurrence_ids:
+            failures.append(
+                "indeterminate audit decisions: "
+                + ",".join(self.indeterminate_occurrence_ids)
+            )
+        if self.unsafe_promotion_occurrence_ids:
+            failures.append(
+                "unsafe promotions: " + ",".join(self.unsafe_promotion_occurrence_ids)
+            )
+        if self.candidate_exclusion_mismatch_occurrence_ids:
+            failures.append(
+                "candidate/excluded mismatches: "
+                + ",".join(self.candidate_exclusion_mismatch_occurrence_ids)
+            )
+        return tuple(failures)
+
+    @property
+    def structural_failure_reasons(self) -> tuple[str, ...]:
+        failures: list[str] = []
+        if not self.scan_result_available:
+            failures.append(
+                "scan result is required for audit disposition reconciliation"
+            )
+        if self.missing_occurrence_ids:
+            failures.append(
+                "missing audit decisions: " + ",".join(self.missing_occurrence_ids)
+            )
+        return tuple(failures)
 
 
 def build_audit_bundle(
@@ -181,6 +254,7 @@ def build_audit_bundle(
         zed_commit=metadata.zed_commit,
         corpus_sample_sha256=corpus.manifest.sample_sha256,
         scan_config_hash=metadata.config_hash,
+        tool_version=metadata.tool_version,
         rule_pack_version=metadata.rule_pack_version,
         sample_size_requested=sample_size,
         occurrences=tuple(samples),
@@ -206,6 +280,7 @@ def serialize_audit_bundle(bundle: AuditBundle) -> str:
         "sample_size_requested": bundle.sample_size_requested,
         "scan_config_hash": bundle.scan_config_hash,
         "schema_version": AUDIT_BUNDLE_SCHEMA_VERSION,
+        "tool_version": bundle.tool_version,
         "zed_commit": bundle.zed_commit,
     }
     return json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
@@ -262,15 +337,19 @@ def validate_audit_schema_contracts(
     decision_properties = _schema_properties(
         decision_schema, f"{result_schema_path}: decisions.items"
     )
-    classification_schema = _as_mapping(
-        decision_properties["classification"],
-        f"{result_schema_path}: classification",
+    _validate_schema_enum(
+        decision_properties,
+        "expected_disposition",
+        AuditDisposition,
+        str(result_schema_path),
     )
-    actual = classification_schema.get("enum")
-    expected = [classification.value for classification in AuditClassification]
-    if actual != expected:
+    corpus_gap_schema = _as_mapping(
+        decision_properties["corpus_gap"],
+        f"{result_schema_path}: corpus_gap",
+    )
+    if corpus_gap_schema.get("type") != "boolean":
         raise UnlabeledAuditError(
-            f"{result_schema_path}: classification enum drifted from runtime"
+            f"{result_schema_path}: corpus_gap type drifted from runtime"
         )
 
 
@@ -336,6 +415,7 @@ def parse_audit_bundle_json(text: str, context: str = "audit-bundle") -> AuditBu
             raw, "corpus_sample_sha256", 64, context
         ),
         scan_config_hash=_require_lower_hex(raw, "scan_config_hash", 64, context),
+        tool_version=_require_string(raw, "tool_version", context),
         rule_pack_version=_require_string(raw, "rule_pack_version", context),
         sample_size_requested=_require_int(
             raw, "sample_size_requested", context, minimum=1
@@ -374,11 +454,12 @@ def parse_audit_result_json(text: str, context: str = "audit-result") -> AuditRe
         decisions.append(
             AuditDecision(
                 occurrence_id=occurrence_id,
-                classification=_parse_enum(
-                    AuditClassification,
-                    _require_string(item, "classification", item_context),
+                expected_disposition=_parse_enum(
+                    AuditDisposition,
+                    _require_string(item, "expected_disposition", item_context),
                     item_context,
                 ),
+                corpus_gap=_require_bool(item, "corpus_gap", item_context),
                 rationale=_require_string(item, "rationale", item_context),
             )
         )
@@ -389,13 +470,17 @@ def parse_audit_result_json(text: str, context: str = "audit-result") -> AuditRe
             raw, "corpus_sample_sha256", 64, context
         ),
         scan_config_hash=_require_lower_hex(raw, "scan_config_hash", 64, context),
+        tool_version=_require_string(raw, "tool_version", context),
+        rule_pack_version=_require_string(raw, "rule_pack_version", context),
         reviewer_id=_require_string(raw, "reviewer_id", context),
         decisions=tuple(decisions),
     )
 
 
 def reconcile_audit_result(
-    bundle: AuditBundle, result: AuditResult
+    bundle: AuditBundle,
+    result: AuditResult,
+    scan_result: ScanResult | None = None,
 ) -> AuditReconciliation:
     identity_checks = (
         ("audit set", bundle.audit_set_id, result.audit_set_id),
@@ -406,12 +491,34 @@ def reconcile_audit_result(
             result.corpus_sample_sha256,
         ),
         ("scan config hash", bundle.scan_config_hash, result.scan_config_hash),
+        ("tool version", bundle.tool_version, result.tool_version),
+        ("rule pack version", bundle.rule_pack_version, result.rule_pack_version),
     )
     for label, expected, actual in identity_checks:
         if actual != expected:
             raise UnlabeledAuditError(
                 f"audit result {label} mismatch: expected {expected}, got {actual}"
             )
+    if scan_result is not None:
+        scan_identity_checks = (
+            ("Zed commit", bundle.zed_commit, scan_result.metadata.zed_commit),
+            (
+                "scan config hash",
+                bundle.scan_config_hash,
+                scan_result.metadata.config_hash,
+            ),
+            ("tool version", bundle.tool_version, scan_result.metadata.tool_version),
+            (
+                "rule pack version",
+                bundle.rule_pack_version,
+                scan_result.metadata.rule_pack_version,
+            ),
+        )
+        for label, expected, actual in scan_identity_checks:
+            if actual != expected:
+                raise UnlabeledAuditError(
+                    f"audit bundle {label} mismatch: expected {expected}, got {actual}"
+                )
     expected_ids = {sample.occurrence_id for sample in bundle.occurrences}
     decisions_by_id = {
         decision.occurrence_id: decision for decision in result.decisions
@@ -421,33 +528,151 @@ def reconcile_audit_result(
         raise UnlabeledAuditError(
             "audit result contains unknown occurrence IDs: " + ",".join(unknown)
         )
-    counts = {
-        classification: sum(
-            decision.classification is classification
+
+    expected_disposition_counts = {
+        disposition: sum(
+            decision.expected_disposition is disposition
             for decision in decisions_by_id.values()
         )
-        for classification in AuditClassification
+        for disposition in AuditDisposition
     }
+    outcome_counts = {outcome: 0 for outcome in AuditOutcome}
+    corpus_gap_ids: list[str] = []
+    indeterminate_ids: list[str] = []
+    unsafe_promotion_ids: list[str] = []
+    candidate_exclusion_mismatch_ids: list[str] = []
+    if scan_result is not None:
+        if len(
+            {occurrence.occurrence_id for occurrence in scan_result.occurrences}
+        ) != len(scan_result.occurrences):
+            raise UnlabeledAuditError("scan result contains duplicate occurrence IDs")
+        scan_occurrences_by_id = {
+            occurrence.occurrence_id: occurrence
+            for occurrence in scan_result.occurrences
+        }
+        unknown_bundle_ids = tuple(sorted(expected_ids - set(scan_occurrences_by_id)))
+        if unknown_bundle_ids:
+            raise UnlabeledAuditError(
+                "audit bundle contains unknown scan occurrence IDs: "
+                + ",".join(unknown_bundle_ids)
+            )
+        bundle_samples_by_id = {
+            sample.occurrence_id: sample for sample in bundle.occurrences
+        }
+        for occurrence_id, sample in bundle_samples_by_id.items():
+            occurrence = scan_occurrences_by_id[occurrence_id]
+            if (
+                sample.path != occurrence.path
+                or sample.primary_span != occurrence.primary_span
+                or sample.syntax_kind != occurrence.syntax_kind
+            ):
+                raise UnlabeledAuditError(
+                    "audit bundle occurrence identity mismatch for " + occurrence_id
+                )
+        for occurrence_id, decision in decisions_by_id.items():
+            outcome = _derive_audit_outcome(
+                scan_occurrences_by_id[occurrence_id].disposition,
+                decision.expected_disposition,
+                decision.corpus_gap,
+            )
+            outcome_counts[outcome] += 1
+            if decision.corpus_gap:
+                corpus_gap_ids.append(occurrence_id)
+            if decision.expected_disposition is AuditDisposition.INDETERMINATE:
+                indeterminate_ids.append(occurrence_id)
+            if outcome is AuditOutcome.UNSAFE_PROMOTION:
+                unsafe_promotion_ids.append(occurrence_id)
+            if outcome is AuditOutcome.CANDIDATE_EXCLUSION_MISMATCH:
+                candidate_exclusion_mismatch_ids.append(occurrence_id)
+
     return AuditReconciliation(
         audit_set_id=bundle.audit_set_id,
         reviewer_id=result.reviewer_id,
-        classification_counts=counts,
+        expected_disposition_counts=expected_disposition_counts,
+        outcome_counts=outcome_counts,
         missing_occurrence_ids=tuple(sorted(expected_ids - set(decisions_by_id))),
+        corpus_gap_occurrence_ids=tuple(sorted(corpus_gap_ids)),
+        indeterminate_occurrence_ids=tuple(sorted(indeterminate_ids)),
+        unsafe_promotion_occurrence_ids=tuple(sorted(unsafe_promotion_ids)),
+        candidate_exclusion_mismatch_occurrence_ids=tuple(
+            sorted(candidate_exclusion_mismatch_ids)
+        ),
+        scan_result_available=scan_result is not None,
     )
 
 
 def serialize_audit_reconciliation(report: AuditReconciliation) -> str:
     payload = {
+        "acceptable": report.is_gate_acceptable,
         "audit_set_id": report.audit_set_id,
-        "classification_counts": {
-            classification.value: report.classification_counts.get(classification, 0)
-            for classification in AuditClassification
-        },
+        "candidate_exclusion_mismatch_occurrence_ids": list(
+            report.candidate_exclusion_mismatch_occurrence_ids
+        ),
         "complete": report.is_complete,
+        "corpus_gap_occurrence_ids": list(report.corpus_gap_occurrence_ids),
+        "expected_disposition_counts": {
+            disposition.value: report.expected_disposition_counts.get(disposition, 0)
+            for disposition in AuditDisposition
+        },
+        "failure_reasons": list(report.failure_reasons),
+        "indeterminate_occurrence_ids": list(report.indeterminate_occurrence_ids),
         "missing_occurrence_ids": list(report.missing_occurrence_ids),
+        "outcome_counts": {
+            outcome.value: report.outcome_counts.get(outcome, 0)
+            for outcome in AuditOutcome
+        },
         "reviewer_id": report.reviewer_id,
+        "scan_result_available": report.scan_result_available,
+        "unsafe_promotion_occurrence_ids": list(report.unsafe_promotion_occurrence_ids),
     }
     return json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+
+
+def serialize_audit_result(result: AuditResult) -> str:
+    payload = {
+        "audit_set_id": result.audit_set_id,
+        "corpus_sample_sha256": result.corpus_sample_sha256,
+        "decisions": [
+            {
+                "corpus_gap": decision.corpus_gap,
+                "expected_disposition": decision.expected_disposition.value,
+                "occurrence_id": decision.occurrence_id,
+                "rationale": decision.rationale,
+            }
+            for decision in result.decisions
+        ],
+        "rule_pack_version": result.rule_pack_version,
+        "scan_config_hash": result.scan_config_hash,
+        "schema_version": AUDIT_RESULT_SCHEMA_VERSION,
+        "tool_version": result.tool_version,
+        "zed_commit": result.zed_commit,
+        "reviewer_id": result.reviewer_id,
+    }
+    return json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+
+
+def _derive_audit_outcome(
+    scanner_disposition: Decision,
+    expected_disposition: AuditDisposition,
+    corpus_gap: bool,
+) -> AuditOutcome:
+    if corpus_gap:
+        return AuditOutcome.CORPUS_GAP
+    if expected_disposition is AuditDisposition.INDETERMINATE:
+        return AuditOutcome.INDETERMINATE
+    if scanner_disposition.value == expected_disposition.value:
+        return AuditOutcome.AGREEMENT
+    if (
+        scanner_disposition is Decision.REVIEW_REQUIRED
+        and expected_disposition is AuditDisposition.CONFIRMED
+    ):
+        return AuditOutcome.CONSERVATIVE_REVIEW
+    if (
+        scanner_disposition is Decision.CONFIRMED
+        and expected_disposition is AuditDisposition.REVIEW_REQUIRED
+    ):
+        return AuditOutcome.UNSAFE_PROMOTION
+    return AuditOutcome.CANDIDATE_EXCLUSION_MISMATCH
 
 
 def _select_occurrences(
@@ -546,6 +771,22 @@ def _schema_properties(schema: Mapping[str, object], context: str) -> dict[str, 
     return _as_mapping(schema.get("properties"), f"{context}: properties")
 
 
+def _validate_schema_enum[EnumType: StrEnum](
+    properties: Mapping[str, object],
+    field: str,
+    enum_type: type[EnumType],
+    context: str,
+) -> None:
+    field_schema = _as_mapping(properties[field], f"{context}: {field}")
+    actual = field_schema.get("enum")
+    expected = [member.value for member in enum_type]
+    if actual != expected:
+        raise UnlabeledAuditError(
+            f"{context}: {field} enum drifted from runtime: "
+            f"expected {expected}, got {actual}"
+        )
+
+
 def _write_text_atomically(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary_path: Path | None = None
@@ -615,6 +856,13 @@ def _require_int(
         raise UnlabeledAuditError(
             f"{context}: {key} must be an integer greater than or equal to {minimum}"
         )
+    return value
+
+
+def _require_bool(raw: Mapping[str, object], key: str, context: str) -> bool:
+    value = raw[key]
+    if not isinstance(value, bool):
+        raise UnlabeledAuditError(f"{context}: {key} must be a boolean")
     return value
 
 

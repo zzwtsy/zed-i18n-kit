@@ -34,20 +34,25 @@ review result 为每个样本记录 presence、disposition、ownership 和简短
 
 任一比例分母为零或小于 policy 最小值时门禁失败。`single_review` 和 `disputed` 不参与阻塞指标。门禁通过只证明该固定 corpus、commit 和 rule pack 的回归表现，不外推为完整 workspace 的统计准确率。
 
-首个 `zed-builtin-v1` policy 在独立结果产生前预注册门槛，避免看到审核结论后移动目标：至少 200 条 in-scope 一致样本；precision/coverage/recall 的最小分母分别为 100/100/150，阈值分别为 99%/50%/95%；unsafe promotion 与 exclusion leakage 的最小分母为 40/30，上限分别为 0%/1%。50% coverage 是防止“全部降级人工审核”的最低自动化价值线，不是完整 workspace 的准确率声明。disposition、ownership、subject kind、高风险 feature 和 9 条规则还必须满足 policy 文件中的明确最小覆盖；这些门槛的机器权威来源是随 wheel 发布的 `zed-builtin-v1.freeze-policy.json`。
+首个 `zed-builtin-v1` policy 在独立结果产生前预注册门槛，避免看到审核结论后移动目标：至少 200 条 in-scope 一致样本；precision/coverage/recall 的最小分母分别为 100/100/150，阈值分别为 99%/50%/95%；unsafe promotion 与 exclusion leakage 的最小分母为 40/30，上限均为 0%。50% coverage 是防止“全部降级人工审核”的最低自动化价值线，不是完整 workspace 的准确率声明。disposition、ownership、subject kind、高风险 feature、15 条 typed sink rules 和 2 条结构化 origin rules 还必须满足 policy 文件中的明确最小覆盖；其中 `documentation_aside` 命令选项排除只在结构化 callback 上生效。这些门槛的机器权威来源是随 wheel 发布的 `zed-builtin-v1.freeze-policy.json`。
 
 ### 4. 未标注 occurrence 单独盲审
 
-unlabeled audit 与 corpus 回归分离。抽样在规则修正前固定，优先选择 corpus 未覆盖路径，并按 rule、disposition 和高风险证据确定性分层。审核结果分类为合法候选、规则误报、corpus gap 或无法判断；它们不回填 corpus precision 分母。
+unlabeled audit 是 workspace holdout audit，与 corpus 回归分离。抽样在规则修正前固定，优先选择 corpus 未覆盖路径，并按 rule、disposition 和高风险证据确定性分层。`AuditDecision` 不再使用互斥的 classification，而记录 `expected_disposition`（`confirmed`、`review_required`、`excluded` 或 `indeterminate`）、`corpus_gap` 布尔值和 rationale。bundle/result 都绑定 audit set、Zed commit、corpus SHA-256、scan config、tool version 和 rule-pack version；blind bundle 不暴露 scanner disposition、rule ID、旧标签或预测。
 
-- `legitimate_candidate`：扫描发现成立，但 corpus 本来就不是 workspace 穷举清单，不要求把该项加入回归集；
-- `false_positive`：该 occurrence 不应作为国际化候选，必须形成规则修复输入；
-- `corpus_gap`：扫描发现成立，且其风险结构或规则覆盖应在冻结前补入 corpus；
-- `indeterminate`：现有上下文不足，必须补调查，不能并入正确或错误计数。
+审计结果不回填 corpus precision 分母。`corpus_gap=true` 表示样本暴露现有 corpus 未覆盖的新语义类别、风险结构或无法由既有标签体系裁决的边界；它不表示“该 occurrence 本身未逐条收录在 corpus”，否则 unlabeled holdout 会天然全部成为 gap。`indeterminate` 表示上下文不足，两者都阻塞冻结。
 
 ### 5. 冻结状态 fail-closed
 
-在 review result、分层覆盖或门禁任一项不足时，rule pack 状态只能是 `draft` 或 `reviewing`，不得标记 `frozen`。生成 bundle、报告失败和继续人工审核都是有效进展，但不能写成规则冻结成功。
+冻结必须同时拥有 corpus review result 和 workspace holdout audit bundle/result。门禁先严格核验两份 audit artifact 的 audit set、commit、corpus、config、tool 和 rule 身份，再将每个决定与 scan-result 中同 occurrence ID 的实际 disposition 对账。scanner `review_required`/reviewer `confirmed` 只记为 conservative review；scanner `confirmed`/reviewer `review_required` 记为 unsafe promotion；candidate/excluded 互相错判、corpus gap 和 indeterminate 均阻塞。在 review、audit、分层覆盖或门禁任一项不足时，rule pack 状态只能是 `draft` 或 `reviewing`，不得标记 `frozen`。生成 bundle、报告失败和继续人工审核都是有效进展，但不能写成规则冻结成功。
+
+### 6. r2 审计触发阶段 1C 的 HIR 能力
+
+`phase-1c-corpus-final-r2` 的全量盲审产生 20 条分歧，独立裁决确认其中一组 sink 值属于协议、身份、用户内容或错误 display，而不是产品文案。corpus 按真实语义更新后，CST scanner 对 7 条 exclusion fixture 仍统一给出 `review_required`，observational exclusion leakage 为 `7/47`。这些值分别来自解构后的协议字段、跨 helper 的文件名列表、泛型回调与错误回退，以及只组合外部字段的格式表达式。
+
+对 `.child(match ...)` 的 element 返回值和纯格式控制字面量，唯一同文件显式返回类型与字面量语法已经能提供足够证据，因此继续由 Tree-sitter 层处理。剩余 7 条不能安全地按变量名、文件路径、sample ID 或精确字符串排除；同一个 sink occurrence 还可能同时对应 mixed sink 与 excluded origin。继续叠加启发式会把产品结构体字段或调用方提供的产品模板误判为外部内容。
+
+因此 rust-analyzer/HIR sidecar 从原先的可选后续增强提前为阶段 1C-B 的阻塞能力，最小职责限定为：解析表达式的实际类型与字段来源、区分本地产品模板和外部协议/用户值、跨 helper/callback 追踪返回来源，并为 sink slot 与 expression origin 分别生成可对账 occurrence。该能力通过同一 `scan-result-v1` 和 capability probe 暴露，不引入阶段 2 inventory、Message ID、runtime 或 Overlay。HIR 证据使 exclusion leakage 归零前，1C 保持 `reviewing`，不得生成新的最终 holdout 或进入阶段 2。
 
 ## 备选方案
 
@@ -55,19 +60,19 @@ unlabeled audit 与 corpus 回归分离。抽样在规则修正前固定，优�
 - 审核者同时查看预测和旧 rationale：便于定位差异，但会诱导确认偏差，只适用于分歧裁决，不适用于首次独立审核。
 - 仅设置 99% precision：可以通过降低自动确认覆盖逃避价值，也会在极小分母下产生误导，拒绝采用。
 - 把 unlabeled occurrence 当作误报：corpus 不是穷举清单，会系统性惩罚合法新发现，拒绝采用。
-- 立即接入 rust-analyzer：当前尚未有独立审计证明 Tree-sitter 缺口阻塞门禁，继续按 ADR 0005 的证据触发条件执行。
+- 在独立审计前立即接入 rust-analyzer：当时没有证据证明 Tree-sitter 缺口阻塞门禁，拒绝采用；r2 审计现已满足触发条件，按第 6 节将最小 HIR 能力提前到阶段 1C-B。
 
 ## 后果
 
-- 新增 review bundle/result 的版本化 schema、CLI 和 gate policy。
-- freeze report 自包含 corpus/tool/config/rule/probe/metric policy，并在执行时重新验证完整 scan snapshot。
+- 新增 review 与 workspace holdout audit bundle/result 的版本化 schema、CLI 和 gate policy。
+- freeze report 自包含 corpus/tool/config/rule/probe/metric/audit policy，并在执行时重新验证完整 scan snapshot。
 - 独立审核成为外部事实输入，工具不会替审核者生成结论。
 - 阶段 1C 可能以 gate failed 状态持续一段时间；这是对证据不足的正确表达。
 - corpus v2 样本字段保持兼容；是否将一致结论物化为 `review_state=independently_reviewed` 由后续受控命令完成。
 
 ## 验证
 
-- snapshot 测试证明 blind bundle 不含任何标签或预测字段。
+- snapshot 测试证明 blind bundle 不含任何标签、scanner disposition、rule ID 或预测字段。
 - review result 正反 fixture 覆盖身份漂移、重复/未知 ID、非法组合和分歧。
 - 手工可算的小型 reviewed 子集覆盖每个 gate 失败原因及通过案例。
 - 真实 266 样本 bundle 重复生成逐字节一致。

@@ -10,6 +10,7 @@
     "zed_commit",
     "corpus_sample_sha256",
     "scan_config_hash",
+    "tool_version",
     "rule_pack_version",
     "sample_size_requested",
     "occurrences"
@@ -29,6 +30,7 @@
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"
     },
+    "tool_version": { "type": "string", "minLength": 1 },
     "rule_pack_version": { "type": "string", "minLength": 1 },
     "sample_size_requested": { "type": "integer", "minimum": 1 },
     "occurrences": {

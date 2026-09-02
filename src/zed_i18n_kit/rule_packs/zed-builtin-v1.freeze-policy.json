@@ -1,29 +1,42 @@
 {
   "schema_version": 1,
-  "review_set_id": "phase-1c-baseline",
+  "review_set_id": "phase-1c-corpus-final-r3",
+  "audit_set_id": "phase-1c-unlabeled-final-r3",
   "zed_commit": "2551721adb5b5187bc27cfae0fbe47f0ed4c5397",
-  "corpus_sample_sha256": "01eccfad9d4c38ff08856bca151e9ae9b2a6c99a505ef9d0c6f731960727e81f",
+  "corpus_sample_sha256": "41525aceed25c0cf857d8e91335b5af2552f357c2d638d1103d1fb4d6c015bef",
   "tool_version": "0.1.0",
   "rule_pack_version": "zed-builtin-v1",
-  "config_hash": "4d9415137dc2b6cbfea88798dd87a593a07be7e9be887ac7c0e015df96cc749b",
+  "config_hash": "96a7bfaea6e39532b439b3373ccffc7c36d8b8ff81914797a251167cc71159bd",
   "rule_ids": [
+    "gpui-detach-and-prompt-err-v1",
     "gpui-interactive-aria-label-v1",
     "gpui-parent-child-literal-v1",
     "gpui-window-prompt-v1",
     "notifications-status-toast-new-v1",
+    "project-event-toast-message-v1",
     "project-language-server-prompt-v1",
+    "project-panel-validation-error-v1",
+    "settings-window-push-dynamic-sub-page-v1",
+    "shared-string-result-error-v1",
     "ui-button-new-v1",
     "ui-label-new-v1",
+    "ui-tooltip-for-action-in-v1",
+    "ui-tooltip-simple-v1",
     "ui-tooltip-text-v1",
+    "ui-tooltip-with-meta-v1",
     "workspace-toast-new-v1"
   ],
   "required_passed_probes": [
     "tree-sitter-rust-binding",
     "cfg-aware-import-resolution",
-    "typed-builtin-rules"
+    "typed-builtin-rules",
+    "controlled-export-index",
+    "allowlisted-expression-macro-cst",
+    "structured-ui-origin-boundaries"
   ],
   "allowed_failed_probes": ["prototype-error-free-parse"],
   "minimum_reviewed_samples": 200,
+  "minimum_audited_samples": 100,
   "strata": [
     { "dimension": "expected_disposition", "value": "confirmed", "minimum": 100 },
     { "dimension": "expected_disposition", "value": "review_required", "minimum": 40 },
@@ -46,14 +59,22 @@
     { "dimension": "feature", "value": "toast", "minimum": 8 },
     { "dimension": "feature", "value": "element_id", "minimum": 8 },
     { "dimension": "feature", "value": "log_or_diagnostic", "minimum": 10 },
+    { "dimension": "rule_id", "value": "gpui-detach-and-prompt-err-v1", "minimum": 1 },
     { "dimension": "rule_id", "value": "gpui-interactive-aria-label-v1", "minimum": 10 },
     { "dimension": "rule_id", "value": "gpui-parent-child-literal-v1", "minimum": 2 },
     { "dimension": "rule_id", "value": "gpui-window-prompt-v1", "minimum": 8 },
     { "dimension": "rule_id", "value": "notifications-status-toast-new-v1", "minimum": 1 },
+    { "dimension": "rule_id", "value": "project-event-toast-message-v1", "minimum": 1 },
     { "dimension": "rule_id", "value": "project-language-server-prompt-v1", "minimum": 1 },
+    { "dimension": "rule_id", "value": "project-panel-validation-error-v1", "minimum": 1 },
+    { "dimension": "rule_id", "value": "settings-window-push-dynamic-sub-page-v1", "minimum": 1 },
+    { "dimension": "rule_id", "value": "shared-string-result-error-v1", "minimum": 1 },
     { "dimension": "rule_id", "value": "ui-button-new-v1", "minimum": 30 },
     { "dimension": "rule_id", "value": "ui-label-new-v1", "minimum": 40 },
+    { "dimension": "rule_id", "value": "ui-tooltip-for-action-in-v1", "minimum": 1 },
+    { "dimension": "rule_id", "value": "ui-tooltip-simple-v1", "minimum": 1 },
     { "dimension": "rule_id", "value": "ui-tooltip-text-v1", "minimum": 20 },
+    { "dimension": "rule_id", "value": "ui-tooltip-with-meta-v1", "minimum": 1 },
     { "dimension": "rule_id", "value": "workspace-toast-new-v1", "minimum": 1 }
   ],
   "metrics": {
@@ -80,10 +101,14 @@
     "exclusion_leakage": {
       "minimum_denominator": 30,
       "minimum": null,
-      "maximum": 0.01
+      "maximum": 0.0
     }
   },
   "maximum_unmatched_samples": 0,
   "maximum_ambiguous_samples": 0,
-  "maximum_disputed_samples": 0
+  "maximum_disputed_samples": 0,
+  "maximum_corpus_gaps": 0,
+  "maximum_indeterminate": 0,
+  "maximum_unsafe_promotions": 0,
+  "maximum_candidate_exclusion_mismatches": 0
 }

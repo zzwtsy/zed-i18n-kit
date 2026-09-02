@@ -3,11 +3,11 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 
 from tree_sitter import Node
 
-from .rust_cst import RustCst, is_within_test_scope, iter_named_nodes
+from .rust_cst import RustCst, is_within_test_scope, iter_named_nodes, parse_rust_cst
 
 
 class SymbolResolutionKind(StrEnum):
@@ -19,6 +19,31 @@ class SymbolResolutionKind(StrEnum):
 class ImportBinding:
     local_name: str
     target: str
+
+
+@dataclass(frozen=True, slots=True, order=True)
+class ExportBinding:
+    module: str
+    local_name: str
+    target: str
+
+
+@dataclass(frozen=True, slots=True)
+class ControlledExportIndex:
+    """Explicit exports from the fixed UI preludes used by scanner rules."""
+
+    bindings: tuple[ExportBinding, ...]
+    indexed_modules: tuple[str, ...]
+    failures: tuple[str, ...]
+
+    def targets_for(self, module: str, local_name: str) -> tuple[str, ...] | None:
+        if module not in self.indexed_modules:
+            return None
+        return tuple(
+            binding.target
+            for binding in self.bindings
+            if binding.module == module and binding.local_name == local_name
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,6 +89,7 @@ class SourceSymbolTable:
     _scoped_wildcards: tuple[_ScopedWildcard, ...]
     _scoped_declarations: tuple[_ScopedDeclaration, ...]
     _imports_by_name: Mapping[str, tuple[_ScopedImport, ...]]
+    _export_index: ControlledExportIndex | None = None
 
     def resolve_target(
         self,
@@ -120,6 +146,36 @@ class SourceSymbolTable:
             return None
 
         visible_wildcards = self._visible_wildcards(at)
+        indexed_candidates: set[tuple[str, ...]] = set()
+        has_unknown_wildcard = False
+        if self._export_index is not None:
+            for wildcard in visible_wildcards:
+                exported_targets = self._export_index.targets_for(wildcard, observed[0])
+                if exported_targets is None:
+                    has_unknown_wildcard = has_unknown_wildcard or (
+                        _wildcard_can_expose_target(observed, target, (wildcard,))
+                    )
+                    continue
+                indexed_candidates.update(
+                    (*_symbol_segments(exported_target), *observed[1:])
+                    for exported_target in exported_targets
+                )
+            if target in indexed_candidates:
+                rendered = ", ".join(
+                    "::".join(path) for path in sorted(indexed_candidates)
+                )
+                kind = (
+                    SymbolResolutionKind.EXACT
+                    if indexed_candidates == {target} and not has_unknown_wildcard
+                    else SymbolResolutionKind.CANDIDATE
+                )
+                return SymbolResolution(
+                    kind,
+                    target_symbol,
+                    f"controlled wildcard export candidates: {rendered}",
+                )
+            if indexed_candidates:
+                return None
         if _wildcard_can_expose_target(observed, target, visible_wildcards):
             rendered = ", ".join(f"{path}::*" for path in visible_wildcards)
             return SymbolResolution(
@@ -172,7 +228,12 @@ class SourceSymbolTable:
         )
 
 
-def build_source_symbol_table(tree: RustCst, path: PurePosixPath) -> SourceSymbolTable:
+def build_source_symbol_table(
+    tree: RustCst,
+    path: PurePosixPath,
+    *,
+    export_index: ControlledExportIndex | None = None,
+) -> SourceSymbolTable:
     crate_name = _crate_name(path)
     imports: list[ImportBinding] = []
     wildcard_imports: list[str] = []
@@ -225,6 +286,84 @@ def build_source_symbol_table(tree: RustCst, path: PurePosixPath) -> SourceSymbo
         _scoped_wildcards=tuple(scoped_wildcards),
         _scoped_declarations=tuple(scoped_declarations),
         _imports_by_name=_index_imports(scoped_imports),
+        _export_index=export_index,
+    )
+
+
+_CONTROLLED_EXPORT_SOURCES = (
+    ("gpui::prelude", PurePosixPath("crates/gpui/src/prelude.rs"), "gpui"),
+    ("ui::prelude", PurePosixPath("crates/ui/src/prelude.rs"), "ui"),
+)
+
+
+def build_controlled_export_index(zed_root: Path) -> ControlledExportIndex:
+    """Parse the fixed checkout's public UI prelude exports.
+
+    Only the two declared prelude modules participate. Unknown wildcard
+    modules remain unresolved candidates, and multiple exported targets never
+    upgrade a symbol to exact.
+    """
+
+    direct: dict[str, set[ImportBinding]] = {}
+    wildcard_exports: dict[str, set[str]] = {}
+    indexed_modules: list[str] = []
+    failures: list[str] = []
+    for module, relative_path, crate_name in _CONTROLLED_EXPORT_SOURCES:
+        source_path = zed_root / relative_path
+        try:
+            source = source_path.read_bytes()
+        except OSError as error:
+            failures.append(f"{relative_path}: {error}")
+            continue
+        tree = parse_rust_cst(source)
+        if tree.has_errors:
+            failures.append(f"{relative_path}: Rust CST contains parse errors")
+            continue
+        module_bindings: list[ImportBinding] = []
+        module_wildcards: list[str] = []
+        for declaration in iter_named_nodes(tree.root, node_type="use_declaration"):
+            if not tree.text(declaration).lstrip().startswith(b"pub use "):
+                continue
+            argument = declaration.child_by_field_name("argument")
+            if argument is not None:
+                _collect_use_bindings(
+                    argument,
+                    (),
+                    crate_name,
+                    module_bindings,
+                    module_wildcards,
+                    source,
+                )
+        direct[module] = {
+            binding for binding in module_bindings if binding.local_name != "_"
+        }
+        wildcard_exports[module] = set(module_wildcards)
+        indexed_modules.append(module)
+
+    resolved: dict[str, set[ImportBinding]] = {
+        module: set(bindings) for module, bindings in direct.items()
+    }
+    for _ in range(len(indexed_modules)):
+        changed = False
+        for module in indexed_modules:
+            before = len(resolved[module])
+            for wildcard in wildcard_exports[module]:
+                resolved[module].update(resolved.get(wildcard, ()))
+            changed = changed or len(resolved[module]) != before
+        if not changed:
+            break
+
+    bindings = tuple(
+        sorted(
+            ExportBinding(module, binding.local_name, binding.target)
+            for module, module_bindings in resolved.items()
+            for binding in module_bindings
+        )
+    )
+    return ControlledExportIndex(
+        bindings=bindings,
+        indexed_modules=tuple(sorted(indexed_modules)),
+        failures=tuple(failures),
     )
 
 

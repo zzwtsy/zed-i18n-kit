@@ -1,6 +1,7 @@
 import argparse
 from pathlib import Path
 
+from zed_i18n_kit.cst_canonical import CanonicalCstError, validate_corpus_cst
 from zed_i18n_kit.golden import GoldenCorpusError, load_corpus, validate_checkout
 
 
@@ -26,7 +27,8 @@ def main() -> int:
     try:
         corpus = load_corpus(args.corpus)
         validate_checkout(corpus, args.zed)
-    except (GoldenCorpusError, OSError, UnicodeError) as error:
+        validate_corpus_cst(corpus, args.zed)
+    except (CanonicalCstError, GoldenCorpusError, OSError, UnicodeError) as error:
         print(f"golden corpus validation failed: {error}")
         return 1
 

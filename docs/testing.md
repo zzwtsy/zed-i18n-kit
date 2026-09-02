@@ -153,11 +153,13 @@ corpus 阈值是回归门禁，不得表述为完整 Zed workspace 的统计准�
 - 在固定 Zed checkout 可用时执行 corpus 源码摘要/span 校验。
 - `scan-result-v1` 严格 schema、确定性 I/O、snapshot 与 UTF-8 span 负面控制；
 - 生产 Rust discovery 的包含、排除、越界符号链接和确定性回归；
-- 合成 Rust CST/typed scanner fixtures，包括作用域化 import/alias、`cfg(test)`、通配符降级、相似名称反例、receiver 与函数内 provenance；
+- 合成 Rust CST/typed scanner fixtures，包括作用域化 import/alias、`cfg(test)`、通配符降级、相似名称反例、receiver、Tooltip 直接/动态/同名 impostor、`documentation_aside` 命令选项上下文和函数内 provenance；
 - 在固定 Zed checkout 可用时执行 `scripts/check_scan_evaluation_contract.py` 的 16 样本闭环。
 - blind review/audit bundle 的字段隐私、确定性、UTF-8 context 与身份绑定；
 - review/audit result 的未知字段、重复/未知 ID、非法状态、身份漂移和不完整结果负面控制；
 - rule freeze policy 的最小分母、分层、identity、capability、unsafe promotion 和零独立审核 fail-closed 控制。
+
+阶段 1C-A 的 holdout audit 使用 `expected_disposition`（`confirmed`、`review_required`、`excluded`、`indeterminate`）和独立的 `corpus_gap` 布尔字段；`corpus_gap` 只标记现有 corpus 未覆盖的新语义类别、风险结构或标签体系缺口，不因一个合法 occurrence 未被逐条收录而置位。bundle 与 result 都必须绑定 `audit_set_id`、Zed commit、corpus SHA-256、scan config、tool version 和 rule-pack version。bundle 不得包含 scanner disposition、rule ID、旧标签或预测。`audit-check` 的 structural completeness（未知/重复/missing occurrence ID）与 gate acceptability 分离：只有完整且无 indeterminate、corpus gap、unsafe promotion 或 candidate/excluded mismatch 才返回 0。`freeze-check` 必须同时消费 corpus review 与 workspace holdout audit；两者身份先核验，再按 occurrence ID 对账。
 
 ### 扫描器阶段
 

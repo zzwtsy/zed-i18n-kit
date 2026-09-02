@@ -5,6 +5,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+from .cst_canonical import CanonicalCstError, validate_corpus_cst
 from .evaluation import (
     EvaluationError,
     EvaluationRate,
@@ -71,6 +72,10 @@ class CliError(ValueError):
     """Raised when CLI arguments would violate an input safety boundary."""
 
 
+class CliUsageError(CliError):
+    """Raised when a command's arguments form an invalid combination."""
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="zed-i18n-kit",
@@ -124,6 +129,8 @@ def build_parser() -> argparse.ArgumentParser:
     freeze_check_parser.add_argument("--scan-result", type=Path, required=True)
     freeze_check_parser.add_argument("--zed", type=Path, default=DEFAULT_ZED_ROOT)
     freeze_check_parser.add_argument("--review-result", type=Path)
+    freeze_check_parser.add_argument("--audit-bundle", type=Path)
+    freeze_check_parser.add_argument("--audit-result", type=Path)
     freeze_check_parser.add_argument(
         "--policy",
         type=Path,
@@ -143,6 +150,7 @@ def build_parser() -> argparse.ArgumentParser:
     audit_check_parser = subparsers.add_parser(
         "audit-check", help="validate and reconcile an unlabeled-occurrence audit"
     )
+    audit_check_parser.add_argument("--scan-result", type=Path, required=True)
     audit_check_parser.add_argument("--audit-bundle", type=Path, required=True)
     audit_check_parser.add_argument("--audit-result", type=Path, required=True)
     return parser
@@ -175,6 +183,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 args.zed,
                 args.review_result,
                 args.policy,
+                args.audit_bundle,
+                args.audit_result,
             )
         if args.command == "audit-export":
             return _run_audit_export(
@@ -186,7 +196,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                 args.output,
             )
         if args.command == "audit-check":
-            return _run_audit_check(args.audit_bundle, args.audit_result)
+            return _run_audit_check(
+                args.audit_bundle, args.audit_result, args.scan_result
+            )
+    except CliUsageError as error:
+        print(f"zed-i18n-kit: {error}", file=sys.stderr)
+        return 2
     except (
         CliError,
         EvaluationError,
@@ -197,6 +212,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         ScannerError,
         ScanResultError,
         UnlabeledAuditError,
+        CanonicalCstError,
         OSError,
         UnicodeError,
     ) as error:
@@ -264,6 +280,7 @@ def _run_corpus_check(corpus_dir: Path, zed_root: Path) -> int:
         schema_resource(UNLABELED_AUDIT_RESULT_SCHEMA_NAME),
     )
     validate_checkout(corpus, zed_root)
+    validate_corpus_cst(corpus, zed_root)
     print(
         f"validated {len(corpus.samples)} corpus samples against "
         f"Zed {corpus.manifest.zed_commit}"
@@ -313,7 +330,13 @@ def _run_freeze_check(
     zed_root: Path,
     review_result_path: Path | None,
     policy_path: Path | None,
+    audit_bundle_path: Path | None = None,
+    audit_result_path: Path | None = None,
 ) -> int:
+    if (audit_bundle_path is None) != (audit_result_path is None):
+        raise CliUsageError(
+            "--audit-bundle and --audit-result must be provided together"
+        )
     corpus = load_corpus(corpus_dir)
     scan_result = load_scan_result(scan_result_path)
     validate_scan_snapshot(scan_result, zed_root)
@@ -322,10 +345,23 @@ def _run_freeze_check(
         if review_result_path is not None
         else None
     )
+    audit_bundle = (
+        load_audit_bundle(audit_bundle_path) if audit_bundle_path is not None else None
+    )
+    audit_result = (
+        load_audit_result(audit_result_path) if audit_result_path is not None else None
+    )
     policy = load_freeze_policy(
         policy_path if policy_path is not None else default_freeze_policy_resource()
     )
-    report = evaluate_freeze_gate(corpus, scan_result, policy, review_result)
+    report = evaluate_freeze_gate(
+        corpus,
+        scan_result,
+        policy,
+        review_result,
+        audit_bundle,
+        audit_result,
+    )
     print(serialize_freeze_gate_report(report, policy), end="")
     print(
         f"freeze gate: status={report.freeze_status}, "
@@ -361,17 +397,21 @@ def _run_audit_export(
     return 0
 
 
-def _run_audit_check(audit_bundle_path: Path, audit_result_path: Path) -> int:
+def _run_audit_check(
+    audit_bundle_path: Path, audit_result_path: Path, scan_result_path: Path
+) -> int:
     bundle = load_audit_bundle(audit_bundle_path)
     result = load_audit_result(audit_result_path)
-    report = reconcile_audit_result(bundle, result)
+    scan_result = load_scan_result(scan_result_path)
+    report = reconcile_audit_result(bundle, result, scan_result)
     print(serialize_audit_reconciliation(report), end="")
     print(
         f"unlabeled audit: reviewed={len(result.decisions)}, "
-        f"missing={len(report.missing_occurrence_ids)}",
+        f"missing={len(report.missing_occurrence_ids)}, "
+        f"acceptable={report.is_gate_acceptable}",
         file=sys.stderr,
     )
-    return 0 if report.is_complete else 1
+    return 0 if report.is_gate_acceptable else 1
 
 
 def _format_rate(rate: EvaluationRate) -> str:

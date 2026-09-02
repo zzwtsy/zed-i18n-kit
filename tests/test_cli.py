@@ -2,7 +2,12 @@ from pathlib import Path
 
 import pytest
 
-from zed_i18n_kit.cli import CliError, _ensure_output_outside_checkout, build_parser
+from zed_i18n_kit.cli import (
+    CliError,
+    _ensure_output_outside_checkout,
+    build_parser,
+    main,
+)
 from zed_i18n_kit.schema_resources import (
     GOLDEN_CORPUS_SCHEMA_NAME,
     REVIEW_BUNDLE_SCHEMA_NAME,
@@ -71,3 +76,76 @@ def test_review_commands_are_registered(command: str) -> None:
         build_parser().parse_args([command, "--help"])
 
     assert exit_info.value.code == 0
+
+
+def test_freeze_check_rejects_only_one_audit_artifact(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    result = main(
+        [
+            "freeze-check",
+            "--scan-result",
+            "/tmp/scan-result.json",
+            "--audit-bundle",
+            "/tmp/audit-bundle.json",
+        ]
+    )
+
+    assert result == 2
+    assert "--audit-bundle and --audit-result" in capsys.readouterr().err
+
+
+def test_freeze_check_rejects_only_audit_result(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    result = main(
+        [
+            "freeze-check",
+            "--scan-result",
+            "/tmp/scan-result.json",
+            "--audit-result",
+            "/tmp/audit-result.json",
+        ]
+    )
+
+    assert result == 2
+    assert "--audit-bundle and --audit-result" in capsys.readouterr().err
+
+
+def test_freeze_check_without_audit_artifacts_returns_reviewing(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    class FakeReport:
+        freeze_status = "reviewing"
+        reviewed_sample_count = 0
+        failures = ("independent unlabeled audit bundle and result are required",)
+        passed = False
+
+    monkeypatch.setattr("zed_i18n_kit.cli.load_corpus", lambda path: object())
+    monkeypatch.setattr("zed_i18n_kit.cli.load_scan_result", lambda path: object())
+    monkeypatch.setattr("zed_i18n_kit.cli.validate_scan_snapshot", lambda *args: None)
+    monkeypatch.setattr(
+        "zed_i18n_kit.cli.default_freeze_policy_resource", lambda: "policy"
+    )
+    monkeypatch.setattr("zed_i18n_kit.cli.load_freeze_policy", lambda path: object())
+    monkeypatch.setattr(
+        "zed_i18n_kit.cli.evaluate_freeze_gate", lambda *args: FakeReport()
+    )
+    monkeypatch.setattr(
+        "zed_i18n_kit.cli.serialize_freeze_gate_report",
+        lambda report, policy: '{"freeze_status":"reviewing"}\n',
+    )
+
+    result = main(
+        [
+            "freeze-check",
+            "--scan-result",
+            "/tmp/scan-result.json",
+        ]
+    )
+    captured = capsys.readouterr()
+
+    assert result == 1
+    assert '"freeze_status":"reviewing"' in captured.out
+    assert "must be provided together" not in captured.err

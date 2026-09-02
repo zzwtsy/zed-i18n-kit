@@ -48,7 +48,7 @@ CST_CALIBRATION_CASES = tuple(
         ("0257", CstCalibrationMode.EXACT, "string_literal"),
         ("0258", CstCalibrationMode.EXACT, "string_literal"),
         ("0259", CstCalibrationMode.EXACT, "string_literal"),
-        ("0260", CstCalibrationMode.SMALLEST_CONTAINING, "raw_string_literal"),
+        ("0260", CstCalibrationMode.EXACT, "raw_string_literal"),
         ("0261", CstCalibrationMode.EXACT, "string_literal"),
         ("0262", CstCalibrationMode.EXACT, "reference_expression"),
         ("0263", CstCalibrationMode.EXACT, "reference_expression"),

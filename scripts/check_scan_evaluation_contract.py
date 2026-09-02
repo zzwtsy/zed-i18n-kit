@@ -6,6 +6,7 @@ from zed_i18n_kit.cst_calibration import (
     CstCalibrationResult,
     validate_cst_calibration,
 )
+from zed_i18n_kit.cst_canonical import CanonicalCstError, validate_corpus_cst
 from zed_i18n_kit.evaluation import (
     EvaluationError,
     EvaluationRate,
@@ -57,6 +58,7 @@ def main() -> int:
         validate_schema_contract(schema_resource(GOLDEN_CORPUS_SCHEMA_NAME))
         validate_scan_result_schema(schema_resource(SCAN_RESULT_SCHEMA_NAME))
         validate_checkout(corpus, args.zed)
+        validate_corpus_cst(corpus, args.zed)
         calibration_results = validate_cst_calibration(corpus, args.zed)
         initial_scan_result = scan_sources(args.zed, profile=PROTOTYPE_SCAN_PROFILE)
         repeated_scan_result = scan_sources(args.zed, profile=PROTOTYPE_SCAN_PROFILE)
@@ -79,6 +81,7 @@ def main() -> int:
         )
     except (
         CstCalibrationError,
+        CanonicalCstError,
         EvaluationError,
         GoldenCorpusError,
         ScanEvaluationContractError,
